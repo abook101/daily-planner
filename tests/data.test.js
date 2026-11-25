@@ -204,6 +204,16 @@
     ok(st.keys().some((k) => k.startsWith("planner.corrupt.")), "newer data kept, not lost");
   });
 
+  test("two copies of the app (e.g. two tabs) don't overwrite each other", () => {
+    const st = fakeStorage();
+    const tab1 = newStore(st), tab2 = newStore(st);
+    tab1.load(); tab2.load();
+    tab1.addRun({ distanceKm: 3 });
+    tab2.addRun({ distanceKm: 4 });
+    eq(tab1.get().training.map((t) => t.distanceKm), [3, 4]);
+    ok(tab2.exportJSON().includes('"distanceKm": 3'), "export includes the other tab's change");
+  });
+
   // ---- export / import ----
   test("export then import gives back the same data", () => {
     const a = newStore();

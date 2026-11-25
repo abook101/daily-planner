@@ -295,7 +295,7 @@
     // All changes go through here: copy, change the copy, validate, then save.
     // If anything is wrong, the real data is untouched and an error is thrown.
     function update(changeFn) {
-      if (!data) load();
+      load(); // always start from what is saved (another tab may have changed it)
       const draft = clone(data);
       const result = changeFn(draft);
       const problems = validateData(draft);
@@ -311,7 +311,7 @@
       return result;
     }
 
-    function get() { if (!data) load(); return clone(data); }
+    function get() { load(); return clone(data); }
 
     const findById = (list, id, what) => {
       const x = list.find((i) => i.id === id);
@@ -407,7 +407,7 @@
 
     // ----- backups: export / import -----
     function exportJSON() {
-      if (!data) load();
+      load(); // always start from what is saved (another tab may have changed it)
       return JSON.stringify({ app: APP_ID, exportedAt: new Date().toISOString(), data }, null, 2);
     }
 
@@ -437,7 +437,7 @@
     // under "planner.backup.before-import", so an import can be undone.
     function applyImport(checked) {
       if (!checked || !checked.ok) throw new Error("Import was not checked or is invalid.");
-      if (!data) load();
+      load(); // always start from what is saved (another tab may have changed it)
       storage.setItem(KEY_BEFORE_IMPORT, JSON.stringify(data));
       const before = data;
       data = clone(checked.data);
