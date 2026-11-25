@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Planner tests</title>
+  <style>
+    body { font-family: -apple-system, "Segoe UI", Roboto, sans-serif; margin: 16px; background: #111827; color: #f9fafb; }
+    li { margin: 4px 0; }
+    .pass { color: #22c55e; } .fail { color: #f87171; }
+    .err { color: #fca5a5; font-size: 0.85rem; display: block; margin-left: 1.4em; }
+    #summary { font-size: 1.2rem; font-weight: 600; }
+  </style>
+</head>
+<body>
+  <h1>Data layer tests</h1>
+  <p class="muted">These use fake storage, so your real planner data is never touched.</p>
+  <p id="summary">Running…</p>
+  <ul id="results"></ul>
+  <script src="../js/store.js"></script>
+  <script src="data.test.js"></script>
+  <script>
+    const ul = document.getElementById("results");
+    window.runDataTests((good, name, err) => {
+      const li = document.createElement("li");
+      li.className = good ? "pass" : "fail";
+      li.textContent = (good ? "✓ " : "✗ ") + name;
+      if (err) { const s = document.createElement("span"); s.className = "err"; s.textContent = err; li.appendChild(s); }
+      ul.appendChild(li);
+    }).then(({ passed, failed }) => {
+      const el = document.getElementById("summary");
+      el.textContent = passed + " passed, " + failed + " failed";
+      el.className = failed ? "fail" : "pass";
+    });
+  </script>
+</body>
+</html>
