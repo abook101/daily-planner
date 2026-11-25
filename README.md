@@ -19,9 +19,10 @@ All data stays on the phone (browser local storage).
 |---|---|
 | `index.html` | The single page of the app |
 | `css/styles.css` | Look and layout (mobile first) |
-| `js/app.js` | App logic (screen) |
+| `js/app.js` | The Today screen: draws the cards and wires the buttons |
 | `js/store.js` | Data layer: saving, checking and backing up all data |
 | `js/plan.js` | Daily plan logic: what to study, which chores, run/gym/rest |
+| `js/today.js` | Today screen rules: study timer, undo, low energy switch, week tally |
 | `sw.js` | Service worker: stores the files on the phone so it works offline |
 | `manifest.webmanifest` | Name, icon and colours for "Add to Home Screen" |
 | `icons/` | App icons |
@@ -94,6 +95,32 @@ plus the most overdue other chore, plus a second one only if it is overdue too.
 
 **Low energy mode.** 1 study block, dishes only, rest or a walk, so no day is a total zero.
 
+## The Today screen (step 4)
+
+From top to bottom:
+
+- **Low energy switch** (top right): switches to the minimal plan (1 study block, dishes,
+  rest or walk). It turns itself off the next day.
+- **Exam strip**: days left per subject, nearest first (scroll sideways).
+  Red = 7 days or less, yellow = 21 or less. `~` = exam date not final yet.
+- **Morning metrics**: recovery %, HRV, resting HR. If Whoop data is already there it shows
+  "From Whoop"; otherwise type the numbers (saved as typed in). Any one number is enough.
+- **Training**: today's suggestion (tap *Why?* for the reason), then *+ Gym* (Push/Pull/Legs chips,
+  the suggested ones are already picked; sets are optional), *+ Run* (km and minutes, both optional),
+  *+ Football*. Below: this week's progress including today.
+- **Study**: today's 45-min blocks. *Start* starts a timer; only the start time is saved, so
+  closing the app or reloading doesn't stop it. *Finish & log* logs the real minutes on the day
+  the timer started. If it ran over 2x the block (forgot to stop it), it logs 45 min and says so.
+  *Did it, log 45* logs without the timer. *Log other study* = any subject, any minutes.
+- **Chores**: today's chores with their status; *Done* sets "last done" to today.
+  *All chores* lists every chore.
+- **Undo**: after every log a message with *Undo* shows for 8 s; after that the
+  "Undo last" button under the exams works for 12 h. Undo only reverses the last log, and
+  refuses if other data changed since (e.g. a Whoop sync), so it can't wipe anything else.
+
+The timer, undo copy and low energy switch are kept in separate local storage keys
+(`planner.timer`, `planner.undo`, `planner.lowEnergy`), not in backups.
+
 ## Install on iPhone
 
 To be written in step 7. Note: iPhone only allows offline mode for pages served
@@ -104,7 +131,7 @@ over HTTPS (or localhost), so step 7 will pick a way to serve it securely.
 1. Project setup ✅
 2. Data model and backups ✅
 3. Daily logic and tests ✅
-4. Today screen, timer and logging
+4. Today screen, timer and logging ✅
 5. Settings
 6. Whoop laptop sync
 7. Tests, README and phone install

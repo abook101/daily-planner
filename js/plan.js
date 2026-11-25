@@ -461,8 +461,9 @@
   const api = {
     planDay, examCountdown, nextExam, studyScores, suggestStudy,
     choreStatus, suggestChores, assessRecovery, weeklyProgress, pickGymFocus, suggestTraining,
-    // helpers, exposed for tests
-    daysBetween, addDays, weekStart,
+    // helpers, exposed for tests and for the Today screen (js/today.js)
+    daysBetween, addDays, weekStart, countsFor,
+    TARGETS: { week: WEEK_TARGET, minSets: MIN_SETS, gymMin: GYM_MIN, gymMax: GYM_MAX, cardio: CARDIO_TARGET },
   };
 
   if (typeof module !== "undefined" && module.exports) module.exports = api;

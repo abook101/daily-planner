@@ -15,26 +15,29 @@
 </head>
 <body>
   <header class="top">
-    <h1>Today</h1>
-    <p id="today-date" class="muted"></p>
+    <div class="top-row">
+      <div>
+        <h1>Today</h1>
+        <p id="today-date" class="muted"></p>
+      </div>
+      <label class="switch" title="Low energy: minimal plan for today">
+        <input id="low-energy" type="checkbox">
+        <span class="switch-track" aria-hidden="true"></span>
+        <span class="switch-text">Low energy</span>
+      </label>
+    </div>
+    <div id="exam-strip" class="exam-strip" aria-label="Exam countdown"></div>
+    <p id="low-energy-banner" class="banner" hidden>Low energy mode: the minimal plan for today. Switches off by itself tomorrow.</p>
+    <button id="undo-pill" class="undo-pill" type="button" hidden></button>
   </header>
 
+  <!-- The cards are filled in by js/app.js. -->
   <main id="app">
-    <!-- Placeholder cards. Later steps fill these in. -->
-    <section class="card" id="card-suggestion">
-      <h2>Today's training</h2>
-      <p class="muted">Run / gym / rest suggestion from Whoop goes here (step 3).</p>
-    </section>
+    <section class="card" id="card-metrics"></section>
+    <section class="card" id="card-training"></section>
+    <section class="card" id="card-study"></section>
+    <section class="card" id="card-chores"></section>
 
-    <section class="card" id="card-study">
-      <h2>Study</h2>
-      <p class="muted">45-min study blocks and exam countdowns go here (step 4).</p>
-    </section>
-
-    <section class="card" id="card-chores">
-      <h2>Chores</h2>
-      <p class="muted">Chores that are due today go here (step 4).</p>
-    </section>
     <section class="card" id="card-backup">
       <h2>Backup</h2>
       <p class="muted">Your data lives only on this phone. Export a backup now and then.</p>
@@ -51,7 +54,14 @@
     <span id="offline-status">Checking offline support…</span>
   </footer>
 
+  <div id="toast" class="toast" role="status" hidden>
+    <span id="toast-text"></span>
+    <button id="toast-undo" type="button" class="link">Undo</button>
+  </div>
+
   <script src="js/store.js"></script>
+  <script src="js/plan.js"></script>
+  <script src="js/today.js"></script>
   <script src="js/app.js"></script>
 </body>
 </html>
