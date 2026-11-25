@@ -23,7 +23,7 @@
   const KEY_PREV = "planner.data.prev";
   const KEY_BEFORE_IMPORT = "planner.backup.before-import";
   const APP_ID = "daily-planner";
-  const STUDY_BLOCK_MIN = 45;
+  const STUDY_BLOCK_MIN = 45; // default only; the real one is settings.studyBlockMin
 
   const GROUPS = ["push", "pull", "legs"];
   const TRAINING_TYPES = ["gym", "run", "football"];
@@ -56,7 +56,7 @@
   // ---------- default data (first run) ----------
 
   // Exam dates are not final yet. These are placeholders spread over
-  // 21 Jan – 7 Feb 2027 and can be edited later (step 5 settings).
+  // 21 Jan – 7 Feb 2027 and can be edited on the Settings screen.
   const DEFAULT_SUBJECTS = [
     ["maths1", "Maths for Engineering 1", "2027-01-21"],
     ["mechdesign", "Basics of Mechanical Design", "2027-01-25"],
@@ -65,6 +65,16 @@
     ["energy", "Energy Systems & Energy Economics", "2027-02-04"],
     ["programming", "Programming for Renewable Energy", "2027-02-07"],
   ];
+
+  // Weekly targets and study block length, editable on the Settings screen.
+  // Data saved before step 5 has no "settings" yet; it then uses these.
+  const DEFAULT_SETTINGS = {
+    studyBlockMin: 45,          // length of one study block
+    gymMin: 3, gymMax: 4,       // gym sessions per week (Mon–Sun)
+    push: 2, pull: 2, legs: 1,  // sessions per muscle group per week
+    runs: 2,                    // runs per week (football counts too)
+  };
+  const NAME_MAX = 60;
 
   const DEFAULT_CHORES = [
     ["hoovering", "Hoovering", 5, 7],
@@ -88,6 +98,7 @@
       training: [],
       metrics: {},   // { "2026-11-25": { recovery, hrv, rhr, source } }
       checkoffs: {}, // { "2026-11-25": ["chore:dishes", "study:maths1:1"] }
+      settings: clone(DEFAULT_SETTINGS),
     };
   }
 
@@ -99,6 +110,7 @@
     if (!s || typeof s !== "object") return [where + ": not an object"];
     if (!isText(s.id)) e.push(where + ": missing id");
     if (!isText(s.name)) e.push(where + ": missing name");
+    else if (s.name.length > NAME_MAX) e.push(where + ": name is longer than " + NAME_MAX + " characters");
     if (s.examDate !== null && !isDateStr(s.examDate)) e.push(where + ": bad examDate");
     if (typeof s.examDateConfirmed !== "boolean") e.push(where + ": examDateConfirmed must be true/false");
     return e;
@@ -119,6 +131,7 @@
     if (!c || typeof c !== "object") return [where + ": not an object"];
     if (!isText(c.id)) e.push(where + ": missing id");
     if (!isText(c.name)) e.push(where + ": missing name");
+    else if (c.name.length > NAME_MAX) e.push(where + ": name is longer than " + NAME_MAX + " characters");
     if (!isInt(c.minDays) || c.minDays < 1) e.push(where + ": minDays must be a whole number ≥ 1");
     if (!isInt(c.maxDays) || c.maxDays < c.minDays) e.push(where + ": maxDays must be ≥ minDays");
     if (c.lastDone !== null && !isDateStr(c.lastDone)) e.push(where + ": bad lastDone");
@@ -165,6 +178,36 @@
     return e;
   }
 
+  // Settings errors are written for people, because they show up on the
+  // Settings screen as they are.
+  function validateSettings(s) {
+    if (!s || typeof s !== "object" || Array.isArray(s)) return ["settings must be an object"];
+    const e = [];
+    const whole = (k, lo, hi, label) => {
+      if (!isInt(s[k]) || s[k] < lo || s[k] > hi) e.push(label + " must be a whole number from " + lo + " to " + hi);
+    };
+    whole("studyBlockMin", 10, 180, "Study block length (minutes)");
+    whole("gymMin", 0, 7, "Gym sessions per week (min)");
+    whole("gymMax", 1, 7, "Gym sessions per week (max)");
+    whole("push", 0, 7, "Push sessions per week");
+    whole("pull", 0, 7, "Pull sessions per week");
+    whole("legs", 0, 7, "Legs sessions per week");
+    whole("runs", 0, 14, "Runs per week");
+    if (e.length) return e;
+    if (s.gymMax < s.gymMin) e.push("Gym sessions per week: max (" + s.gymMax + ") can't be less than min (" + s.gymMin + ")");
+    for (const g of GROUPS) {
+      if (s[g] > s.gymMax) {
+        e.push(g[0].toUpperCase() + g.slice(1) + " " + s[g] + "x a week needs at least " + s[g] + " gym sessions, but max is " + s.gymMax);
+      }
+    }
+    return e;
+  }
+
+  // Saved settings, with defaults filled in for anything missing.
+  function settingsOf(d) {
+    return Object.assign({}, DEFAULT_SETTINGS, (d && d.settings) || {});
+  }
+
   function validateData(d) {
     if (!d || typeof d !== "object" || Array.isArray(d)) return ["data is not an object"];
     const e = [];
@@ -199,6 +242,7 @@
       if (!isDateStr(date)) e.push("checkoffs: bad date key '" + date + "'");
       if (!Array.isArray(list) || !list.every(isText)) e.push("checkoffs[" + date + "]: must be a list of names");
     }
+    if (d.settings !== undefined) e.push(...validateSettings(d.settings));
     return e;
   }
 
@@ -329,9 +373,9 @@
     }
 
     // ----- study -----
-    function addStudySession({ subjectId, minutes = STUDY_BLOCK_MIN, date = today() }) {
+    function addStudySession({ subjectId, minutes, date = today() }) {
       return update((d) => {
-        const s = { id: newId(), subjectId, minutes, date };
+        const s = { id: newId(), subjectId, minutes: minutes === undefined ? settingsOf(d).studyBlockMin : minutes, date };
         d.studySessions.push(s);
         return s;
       });
@@ -405,6 +449,126 @@
       return (get().checkoffs[date] || []).includes(itemKey);
     }
 
+    // ----- settings screen (step 5) -----
+    // These check the input first and throw a plain-English "Not saved: ..."
+    // error. The final check is still validateData() inside update(), so
+    // nothing invalid can ever be saved, whichever way it comes in.
+
+    function fail(msg) { throw new Error("Not saved: " + msg); }
+
+    // Trimmed name, or an error if it's empty, too long, or already used.
+    function checkName(list, name, exceptId, what) {
+      const n = typeof name === "string" ? name.trim().replace(/\s+/g, " ") : "";
+      if (!n) fail(what + " name can't be empty.");
+      if (n.length > NAME_MAX) fail(what + " name is too long (max " + NAME_MAX + " characters).");
+      if (list.some((x) => x.id !== exceptId && x.name.toLowerCase() === n.toLowerCase())) {
+        fail("there is already a " + what.toLowerCase() + " called '" + n + "'.");
+      }
+      return n;
+    }
+
+    // A readable id made from the name ("Fluid Mechanics" -> "fluid-mechanics").
+    function idFromName(list, name) {
+      const base = name.toLowerCase().normalize("NFKD").replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 30) || "item";
+      let id = base, i = 2;
+      while (list.some((x) => x.id === id)) id = base + "-" + i++;
+      return id;
+    }
+
+    function checkExam(examDate, confirmed) {
+      const date = examDate === "" || examDate === undefined ? null : examDate;
+      if (date !== null && !isDateStr(date)) fail("exam date isn't a real date.");
+      if (confirmed && date === null) fail("set an exam date before marking it confirmed.");
+      return { examDate: date, examDateConfirmed: !!confirmed };
+    }
+
+    function checkChoreFields(minDays, maxDays, lastDone) {
+      if (!isInt(minDays) || minDays < 1 || minDays > 365) fail("'every X days' needs a whole number from 1 to 365.");
+      if (!isInt(maxDays) || maxDays < 1 || maxDays > 365) fail("'to Y days' needs a whole number from 1 to 365.");
+      if (maxDays < minDays) fail("the second number of days (" + maxDays + ") can't be smaller than the first (" + minDays + ").");
+      const last = lastDone === "" || lastDone === undefined ? null : lastDone;
+      if (last !== null && !isDateStr(last)) fail("'last done' isn't a real date.");
+      if (last !== null && last > today()) fail("'last done' can't be in the future.");
+      return last;
+    }
+
+    function addSubject({ name, examDate = null, examDateConfirmed = false }) {
+      return update((d) => {
+        const n = checkName(d.subjects, name, null, "Subject");
+        const s = Object.assign({ id: idFromName(d.subjects, n), name: n }, checkExam(examDate, examDateConfirmed));
+        d.subjects.push(s);
+        return s;
+      });
+    }
+
+    function updateSubject(id, { name, examDate = null, examDateConfirmed = false }) {
+      return update((d) => {
+        const s = findById(d.subjects, id, "Subject");
+        s.name = checkName(d.subjects, name, id, "Subject");
+        Object.assign(s, checkExam(examDate, examDateConfirmed));
+        return s;
+      });
+    }
+
+    // How much is logged for a subject (shown before removing it).
+    function subjectUsage(id) {
+      const list = get().studySessions.filter((s) => s.subjectId === id);
+      return { sessions: list.length, minutes: list.reduce((a, s) => a + s.minutes, 0) };
+    }
+
+    // Removes the subject AND its logged study sessions (a session must
+    // belong to a subject). The screen warns with the numbers first.
+    function removeSubject(id) {
+      return update((d) => {
+        findById(d.subjects, id, "Subject");
+        const removed = d.studySessions.filter((s) => s.subjectId === id).length;
+        d.subjects = d.subjects.filter((s) => s.id !== id);
+        d.studySessions = d.studySessions.filter((s) => s.subjectId !== id);
+        return { removedSessions: removed };
+      });
+    }
+
+    function addChore({ name, minDays, maxDays, lastDone = null }) {
+      return update((d) => {
+        const n = checkName(d.chores, name, null, "Chore");
+        const last = checkChoreFields(minDays, maxDays, lastDone);
+        const c = { id: idFromName(d.chores, n), name: n, minDays, maxDays, lastDone: last };
+        d.chores.push(c);
+        return c;
+      });
+    }
+
+    function updateChore(id, { name, minDays, maxDays, lastDone = null }) {
+      return update((d) => {
+        const c = findById(d.chores, id, "Chore");
+        c.name = checkName(d.chores, name, id, "Chore");
+        c.lastDone = checkChoreFields(minDays, maxDays, lastDone);
+        c.minDays = minDays; c.maxDays = maxDays;
+        return c;
+      });
+    }
+
+    function removeChore(id) {
+      return update((d) => {
+        findById(d.chores, id, "Chore");
+        d.chores = d.chores.filter((c) => c.id !== id);
+      });
+    }
+
+    function getSettings() { return settingsOf(get()); }
+
+    // Change some settings, e.g. setSettings({ runs: 3 }). Checked as a whole.
+    function setSettings(changes) {
+      return update((d) => {
+        const next = Object.assign(settingsOf(d), changes);
+        for (const k of Object.keys(next)) if (!(k in DEFAULT_SETTINGS)) fail("unknown setting '" + k + "'.");
+        const problems = validateSettings(next);
+        if (problems.length) fail(problems.join("; ") + ".");
+        d.settings = next;
+        return clone(next);
+      });
+    }
+
     // ----- backups: export / import -----
     function exportJSON() {
       load(); // always start from what is saved (another tab may have changed it)
@@ -458,6 +622,9 @@
       setExamDate,
       addStudySession, deleteStudySession, studyMinutes,
       markChoreDone, setChoreRange,
+      addSubject, updateSubject, removeSubject, subjectUsage,
+      addChore, updateChore, removeChore,
+      getSettings, setSettings,
       addGym, addRun, addFootball, deleteTraining,
       setMetrics, getMetrics,
       setChecked, isChecked,
@@ -498,8 +665,8 @@
   }
 
   const api = {
-    SCHEMA_VERSION, STUDY_BLOCK_MIN, GROUPS,
-    createStore, defaultData, validateData, migrate, MIGRATIONS,
+    SCHEMA_VERSION, STUDY_BLOCK_MIN, GROUPS, DEFAULT_SETTINGS, NAME_MAX,
+    createStore, defaultData, validateData, validateSettings, settingsOf, migrate, MIGRATIONS,
     isDateStr, toDateStr, downloadBackup, importBackupFile,
   };
 

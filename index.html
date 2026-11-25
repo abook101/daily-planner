@@ -14,17 +14,22 @@
   <link rel="stylesheet" href="css/styles.css">
 </head>
 <body>
-  <header class="top">
+  <header class="top" id="today-header">
     <div class="top-row">
       <div>
         <h1>Today</h1>
         <p id="today-date" class="muted"></p>
       </div>
-      <label class="switch" title="Low energy: minimal plan for today">
-        <input id="low-energy" type="checkbox">
-        <span class="switch-track" aria-hidden="true"></span>
-        <span class="switch-text">Low energy</span>
-      </label>
+      <div class="top-actions">
+        <label class="switch" title="Low energy: minimal plan for today">
+          <input id="low-energy" type="checkbox">
+          <span class="switch-track" aria-hidden="true"></span>
+          <span class="switch-text">Low energy</span>
+        </label>
+        <button type="button" class="icon-btn" data-action="open-settings" aria-label="Settings" title="Settings">
+          <svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+        </button>
+      </div>
     </div>
     <div id="exam-strip" class="exam-strip" aria-label="Exam countdown"></div>
     <p id="low-energy-banner" class="banner" hidden>Low energy mode: the minimal plan for today. Switches off by itself tomorrow.</p>
@@ -50,6 +55,16 @@
     </section>
   </main>
 
+  <!-- Settings screen (gear on Today). Filled in by js/settings.js. -->
+  <div id="settings-view" hidden>
+    <header class="top">
+      <button type="button" class="link back" data-action="close-settings">‹ Today</button>
+      <h1>Settings</h1>
+      <p class="muted">Every change is checked before it's saved. If something's wrong, nothing changes.</p>
+    </header>
+    <main id="settings-main"></main>
+  </div>
+
   <footer class="bottom muted">
     <span id="offline-status">Checking offline support…</span>
   </footer>
@@ -62,6 +77,7 @@
   <script src="js/store.js"></script>
   <script src="js/plan.js"></script>
   <script src="js/today.js"></script>
+  <script src="js/settings.js"></script>
   <script src="js/app.js"></script>
 </body>
 </html>

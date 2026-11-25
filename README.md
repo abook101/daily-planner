@@ -23,6 +23,7 @@ All data stays on the phone (browser local storage).
 | `js/store.js` | Data layer: saving, checking and backing up all data |
 | `js/plan.js` | Daily plan logic: what to study, which chores, run/gym/rest |
 | `js/today.js` | Today screen rules: study timer, undo, low energy switch, week tally |
+| `js/settings.js` | The Settings screen (gear on Today) |
 | `sw.js` | Service worker: stores the files on the phone so it works offline |
 | `manifest.webmanifest` | Name, icon and colours for "Add to Home Screen" |
 | `icons/` | App icons |
@@ -121,6 +122,29 @@ From top to bottom:
 The timer, undo copy and low energy switch are kept in separate local storage keys
 (`planner.timer`, `planner.undo`, `planner.lowEnergy`), not in backups.
 
+## Settings (step 5)
+
+Tap the gear (top right on Today). The address becomes `#settings`; *‹ Today* goes back.
+
+- **Subjects and exams**: rename, set or clear the exam date, tick *Date is final*
+  (removes the `~` on Today). *+ Add subject* adds one. *Remove* asks first and says how
+  many study sessions are logged for it: those are deleted with the subject (a session
+  must belong to a subject). Renaming keeps all logged sessions.
+- **Chores**: rename, *Every X to Y days*, and *Last done* (to set it by hand, or empty =
+  not logged yet; can't be in the future). Add and remove (asks first). 1 to 1 = daily.
+- **Training targets** per week: gym sessions min/max (3–4), Push/Pull/Legs (2/2/1),
+  runs (2, football counts too). A group can't need more sessions than the gym max.
+- **Study block length**: 45 min by default (10–180). Changes the timer and
+  *Did it, log* from now on; already logged minutes stay as they are.
+
+Every Save goes through the data layer's checks. If anything is wrong, a red message
+says why, what you typed stays on screen, and nothing is saved. Each save or removal can
+be undone with *Undo* (same as logs on Today). Unsaved edits in other boxes are kept
+when you save one box.
+
+The targets and block length are saved in the data as `settings` (so they're in backups).
+Data from before step 5 has no `settings` and simply uses the defaults: no migration needed.
+
 ## Install on iPhone
 
 To be written in step 7. Note: iPhone only allows offline mode for pages served
@@ -132,6 +156,6 @@ over HTTPS (or localhost), so step 7 will pick a way to serve it securely.
 2. Data model and backups ✅
 3. Daily logic and tests ✅
 4. Today screen, timer and logging ✅
-5. Settings
+5. Settings ✅
 6. Whoop laptop sync
 7. Tests, README and phone install

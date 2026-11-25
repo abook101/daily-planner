@@ -122,7 +122,9 @@
   // ---------- this week's training, including today ----------
   // (plan.js's weeklyProgress stops at yesterday because it plans today;
   // the screen wants to show today's logs too.)
-  function weekTally(training, today) {
+  // `settings` = data.settings (leave out for the defaults).
+  function weekTally(training, today, settings) {
+    const targets = L.targetsFrom(settings);
     const start = L.weekStart(today);
     const week = training.filter((t) => t.date >= start && t.date <= today);
     const gym = week.filter((t) => t.type === "gym");
@@ -130,12 +132,12 @@
     for (const g of ["push", "pull", "legs"]) groups[g] = gym.filter((t) => L.countsFor(t, g)).length;
     return {
       groups,
-      targets: L.TARGETS.week,
+      targets: targets.week,
       gymSessions: gym.length,
-      gymMin: L.TARGETS.gymMin, gymMax: L.TARGETS.gymMax,
+      gymMin: targets.gymMin, gymMax: targets.gymMax,
       runs: week.filter((t) => t.type === "run").length,
       football: week.filter((t) => t.type === "football").length,
-      cardioTarget: L.TARGETS.cardio,
+      cardioTarget: targets.cardio,
     };
   }
 

@@ -14,8 +14,12 @@
 "use strict";
 
 (function (root) {
+  const P = typeof module !== "undefined" && module.exports ? require("./store.js") : root.PlannerData;
+
   // ---------- settings (easy to tweak) ----------
-  const STUDY_BLOCK_MIN = 45;
+  // Study block length and the weekly training targets are NOT here: they
+  // are saved in the data (data.settings) and edited on the Settings screen.
+  // Defaults: 45-min blocks; gym 3–4x/week; Push 2, Pull 2, Legs 1; 2 runs.
   const STUDY_BLOCKS_PER_DAY = 2;
   const STUDY_LOOKBACK_DAYS = 14;    // "recently studied" = the last 2 weeks
   const STUDY_NEGLECT_MIN = 300;     // 300 min studied recently halves a subject's pull
@@ -32,14 +36,21 @@
   const BASELINE_DAYS = 7;
   const BASELINE_MIN_VALUES = 3;     // need at least 3 days to call it an average
 
-  const WEEK_TARGET = { push: 2, pull: 2, legs: 1 };
   const MIN_SETS = 3;
-  const GYM_MIN = 3, GYM_MAX = 4;
-  const CARDIO_TARGET = 2;           // runs + football
 
   const GROUPS = ["push", "pull", "legs"];
   const GROUP_NAME = { push: "Push", pull: "Pull", legs: "Legs" };
   const GROUP_DETAIL = { push: "chest, triceps, shoulders", pull: "back, biceps", legs: "legs" };
+
+  // The weekly targets from the saved settings (defaults if not set).
+  function targetsFrom(settings) {
+    const s = Object.assign({}, P.DEFAULT_SETTINGS, settings || {});
+    return {
+      week: { push: s.push, pull: s.pull, legs: s.legs },
+      minSets: MIN_SETS, gymMin: s.gymMin, gymMax: s.gymMax,
+      cardio: s.runs,                // runs + football
+    };
+  }
 
   // ---------- date helpers ----------
   // Dates are "YYYY-MM-DD". We count in whole days using UTC so that
@@ -152,7 +163,7 @@
       key: "study:" + e.subjectId + ":" + (i + 1),
       subjectId: e.subjectId,
       subjectName: e.name,
-      minutes: STUDY_BLOCK_MIN,
+      minutes: P.settingsOf(data).studyBlockMin,
       daysLeft: e.daysLeft,
       reason: studyReason(e, focus),
     }));
@@ -309,14 +320,16 @@
   }
 
   // What's done this week (Monday to yesterday; today's logs are handled separately).
-  function weeklyProgress(training, today) {
+  // `settings` = data.settings (leave out for the defaults).
+  function weeklyProgress(training, today, settings) {
+    const T = targetsFrom(settings);
     const start = weekStart(today);
     const week = training.filter((t) => t.date >= start && t.date < today);
     const gym = week.filter((t) => t.type === "gym");
     const groups = {}, deficits = {}, lastTrained = {};
     for (const g of GROUPS) {
       groups[g] = gym.filter((t) => countsFor(t, g)).length;
-      deficits[g] = Math.max(0, WEEK_TARGET[g] - groups[g]);
+      deficits[g] = Math.max(0, T.week[g] - groups[g]);
       const all = training.filter((t) => t.type === "gym" && t.date < today && countsFor(t, g)).map((t) => t.date).sort();
       lastTrained[g] = all.length ? all[all.length - 1] : null;
     }
@@ -325,19 +338,20 @@
     const gymSessions = gym.length;
     const groupsMet = GROUPS.every((g) => deficits[g] === 0);
     return {
-      weekStart: start,
+      weekStart: start, targets: T,
       gymSessions, groups, deficits, lastTrained, runs, football,
       cardio: runs + football,
       daysLeftInWeek: 7 - weekday(today), // including today
-      gymMet: gymSessions >= GYM_MIN && groupsMet,
-      gymMaxed: gymSessions >= GYM_MAX,
-      cardioMet: runs + football >= CARDIO_TARGET,
+      gymMet: gymSessions >= T.gymMin && groupsMet,
+      gymMaxed: gymSessions >= T.gymMax,
+      cardioMet: runs + football >= T.cardio,
     };
   }
 
   function weekSummary(wp) {
-    return "This week: " + GROUPS.map((g) => GROUP_NAME[g] + " " + wp.groups[g] + "/" + WEEK_TARGET[g]).join(", ") +
-      "; gym " + wp.gymSessions + " of " + GYM_MIN + "–" + GYM_MAX + "; cardio " + wp.cardio + "/" + CARDIO_TARGET + ".";
+    const T = wp.targets;
+    return "This week: " + GROUPS.map((g) => GROUP_NAME[g] + " " + wp.groups[g] + "/" + T.week[g]).join(", ") +
+      "; gym " + wp.gymSessions + " of " + T.gymMin + "–" + T.gymMax + "; cardio " + wp.cardio + "/" + T.cardio + ".";
   }
 
   // Which muscle group(s) to train today.
@@ -353,10 +367,10 @@
     if (behind.length === 0) {
       // All groups hit, but under 3 sessions: train what's been rested longest.
       const oldest = GROUPS.slice().sort((a, b) => (wp.lastTrained[a] || "").localeCompare(wp.lastTrained[b] || ""))[0];
-      return { groups: [oldest], why: "All groups have hit their target; one more session gets you to " + GYM_MIN + ". " + GROUP_NAME[oldest] + " has rested longest." };
+      return { groups: [oldest], why: "All groups have hit their target; one more session gets you to " + wp.targets.gymMin + ". " + GROUP_NAME[oldest] + " has rested longest." };
     }
     const needed = behind.reduce((s, g) => s + wp.deficits[g], 0);
-    const slots = Math.max(1, Math.min(GYM_MAX - wp.gymSessions, wp.daysLeftInWeek));
+    const slots = Math.max(1, Math.min(wp.targets.gymMax - wp.gymSessions, wp.daysLeftInWeek));
     const n = Math.min(behind.length, Math.ceil(needed / slots));
     const groups = behind.slice(0, n).sort((a, b) => GROUPS.indexOf(a) - GROUPS.indexOf(b));
     let why = GROUP_NAME[behind[0]] + " is furthest behind";
@@ -401,14 +415,14 @@
   // otherwise a run.
   function goodDay(wp, lead) {
     if (!wp.gymMet && !wp.gymMaxed) return gymSuggestion(wp, lead);
-    const why = wp.gymMaxed ? "Already " + GYM_MAX + " gym sessions this week (the max)" : "Weekly gym target met";
+    const why = wp.gymMaxed ? "Already " + wp.targets.gymMax + " gym sessions this week (the max)" : "Weekly gym target met";
     if (!wp.cardioMet) return easyRun(lead + " " + why + ", so a run instead. " + weekSummary(wp), "Run");
     return easyRun(lead + " " + why + " and cardio done too: an extra easy run if you feel like it, or rest. " + weekSummary(wp), "Optional easy run");
   }
 
   function suggestTraining(data, today, options) {
     const lowEnergy = options && options.lowEnergy;
-    const wp = weeklyProgress(data.training, today);
+    const wp = weeklyProgress(data.training, today, data.settings);
     const rec = assessRecovery(data.metrics, today);
     const exam = nextExam(data.subjects, today);
     const base = { recovery: rec, week: wp };
@@ -462,8 +476,8 @@
     planDay, examCountdown, nextExam, studyScores, suggestStudy,
     choreStatus, suggestChores, assessRecovery, weeklyProgress, pickGymFocus, suggestTraining,
     // helpers, exposed for tests and for the Today screen (js/today.js)
-    daysBetween, addDays, weekStart, countsFor,
-    TARGETS: { week: WEEK_TARGET, minSets: MIN_SETS, gymMin: GYM_MIN, gymMax: GYM_MAX, cardio: CARDIO_TARGET },
+    daysBetween, addDays, weekStart, countsFor, targetsFrom,
+    TARGETS: targetsFrom(null), // the defaults; the real ones come from data.settings
   };
 
   if (typeof module !== "undefined" && module.exports) module.exports = api;

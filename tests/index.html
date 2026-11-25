@@ -23,6 +23,7 @@
   <script src="data.test.js"></script>
   <script src="plan.test.js"></script>
   <script src="today.test.js"></script>
+  <script src="settings.test.js"></script>
   <script>
     const ul = document.getElementById("results");
     function show(good, name, err) {
@@ -40,7 +41,9 @@
       const b = await window.runPlanTests(show);
       heading("Today screen helpers (today.js)");
       const c = await window.runTodayTests(show);
-      const passed = a.passed + b.passed + c.passed, failed = a.failed + b.failed + c.failed;
+      heading("Settings (store.js + plan.js)");
+      const e = await window.runSettingsTests(show);
+      const passed = a.passed + b.passed + c.passed + e.passed, failed = a.failed + b.failed + c.failed + e.failed;
       const el = document.getElementById("summary");
       el.textContent = passed + " passed, " + failed + " failed";
       el.className = failed ? "fail" : "pass";

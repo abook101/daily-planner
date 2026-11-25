@@ -11,6 +11,7 @@
 //
 // Rules worth testing (timer, undo, low energy, week tally) live in
 // js/today.js and have their own tests; this file only draws and wires.
+// The Settings screen is drawn by js/settings.js (render() switches to it).
 "use strict";
 
 const store = PlannerData.createStore(window.localStorage);
@@ -25,6 +26,7 @@ const ui = {
   gymSets: {},           // sets typed in the gym form (kept while chips change)
   editMetrics: false,
   open: {},              // which <details> sections are expanded
+  justSaved: null,       // Settings: the form just saved (its fields are redrawn from the data)
 };
 
 const today = () => PlannerData.toDateStr(new Date());
@@ -154,7 +156,7 @@ function renderTraining(plan, data, day) {
   const s = plan.training;
   const zone = s.recovery && s.recovery.zone;
   const logged = data.training.filter((t) => t.date === day);
-  const week = T.weekTally(data.training, day);
+  const week = T.weekTally(data.training, day, data.settings);
 
   const describe = (t) => {
     if (t.type === "gym") {
@@ -255,7 +257,7 @@ function renderStudy(plan, data, day) {
     details("study-other", "Log other study",
       h("div", { class: "field-row" },
         h("label", { class: "field grow" }, h("span", {}, "Subject"), h("select", { id: "other-subject" }, subjects)),
-        h("label", { class: "field" }, h("span", {}, "Minutes"), h("input", { id: "other-min", type: "text", inputmode: "numeric", value: "45" }))),
+        h("label", { class: "field" }, h("span", {}, "Minutes"), h("input", { id: "other-min", type: "text", inputmode: "numeric", value: String(PlannerData.settingsOf(data).studyBlockMin) }))),
       h("button", { type: "button", class: "wide", "data-action": "study-other" }, "Log study")));
   tick();
 }
@@ -286,6 +288,11 @@ let lastDay = null;
 function render() {
   const day = today();
   lastDay = day;
+  // Two screens on one page: Today, or Settings when the address ends in #settings.
+  const inSettings = isSettingsView();
+  document.body.classList.toggle("in-settings", inSettings);
+  document.getElementById("settings-view").hidden = !inSettings;
+  if (inSettings) { renderSettings(); return; }
   const data = store.get();
   const plan = L.planDay(data, day, { lowEnergy: T.isLowEnergy(LS, day) });
   renderHeader(plan);
@@ -426,7 +433,7 @@ function setupEvents() {
   document.body.addEventListener("click", (e) => {
     const el = e.target.closest("[data-action]");
     if (!el || el.disabled) return;
-    const fn = actions[el.dataset.action];
+    const fn = actions[el.dataset.action] || settingsActions[el.dataset.action];
     if (fn) fn(el);
   });
   document.getElementById("toast-undo").addEventListener("click", () => {
@@ -441,6 +448,8 @@ function setupEvents() {
   // Coming back to the app (or another tab saved something): redraw.
   document.addEventListener("visibilitychange", () => { if (!document.hidden) render(); });
   window.addEventListener("storage", () => render());
+  // Gear / back button (and the phone's back gesture in a browser tab).
+  window.addEventListener("hashchange", () => { render(); window.scrollTo(0, 0); });
   // Timer every second; new day after midnight.
   setInterval(() => { if (today() !== lastDay) render(); else tick(); }, 1000);
 }
