@@ -13,25 +13,34 @@
   </style>
 </head>
 <body>
-  <h1>Data layer tests</h1>
+  <h1>Planner tests</h1>
   <p class="muted">These use fake storage, so your real planner data is never touched.</p>
   <p id="summary">Running…</p>
   <ul id="results"></ul>
   <script src="../js/store.js"></script>
+  <script src="../js/plan.js"></script>
   <script src="data.test.js"></script>
+  <script src="plan.test.js"></script>
   <script>
     const ul = document.getElementById("results");
-    window.runDataTests((good, name, err) => {
+    function show(good, name, err) {
       const li = document.createElement("li");
       li.className = good ? "pass" : "fail";
       li.textContent = (good ? "✓ " : "✗ ") + name;
       if (err) { const s = document.createElement("span"); s.className = "err"; s.textContent = err; li.appendChild(s); }
       ul.appendChild(li);
-    }).then(({ passed, failed }) => {
+    }
+    function heading(text) { const h = document.createElement("h2"); h.textContent = text; ul.appendChild(h); }
+    (async () => {
+      heading("Data layer (store.js)");
+      const a = await window.runDataTests(show);
+      heading("Daily plan logic (plan.js)");
+      const b = await window.runPlanTests(show);
+      const passed = a.passed + b.passed, failed = a.failed + b.failed;
       const el = document.getElementById("summary");
       el.textContent = passed + " passed, " + failed + " failed";
       el.className = failed ? "fail" : "pass";
-    });
+    })();
   </script>
 </body>
 </html>

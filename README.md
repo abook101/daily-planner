@@ -21,6 +21,7 @@ All data stays on the phone (browser local storage).
 | `css/styles.css` | Look and layout (mobile first) |
 | `js/app.js` | App logic (screen) |
 | `js/store.js` | Data layer: saving, checking and backing up all data |
+| `js/plan.js` | Daily plan logic: what to study, which chores, run/gym/rest |
 | `sw.js` | Service worker: stores the files on the phone so it works offline |
 | `manifest.webmanifest` | Name, icon and colours for "Add to Home Screen" |
 | `icons/` | App icons |
@@ -60,6 +61,39 @@ anything; the data you had is kept as `planner.backup.before-import`).
 Note: on iPhone, local storage can be wiped if the app isn't opened for a few weeks or
 the phone is low on space, so export a backup regularly (e.g. weekly, to Files/iCloud).
 
+## How the daily plan works (`js/plan.js`)
+
+`PlannerLogic.planDay(data, "YYYY-MM-DD", { lowEnergy })` returns today's plan.
+It only reads the data it is given (never saves anything), and every suggestion
+comes with a short reason. All the numbers below are settings at the top of the file.
+
+**Study (2 blocks of 45 min).** Each subject gets a score:
+how close the exam is (1 / days left², so the closer exam matters much more)
+x how little you studied it in the last 14 days (300 min studied halves its score).
+The top 2 subjects get a block each. If an exam is 3 days away or less, both blocks go to it.
+Finished exams are skipped. Only sessions before today count, so the plan
+doesn't reshuffle after you log your first block.
+
+**Chores.** Each chore is *not due* (under min days), *due* (min to max days),
+*overdue* (over max days) or *never logged*. Dishes (daily) are always on the list,
+plus the most overdue other chore, plus a second one only if it is overdue too.
+"Most overdue" = days since done / max days. A chore you already did today uses up a slot.
+
+**Training (run / gym / rest).** In this order:
+1. Already logged training today → done.
+2. Low energy mode → rest or easy walk.
+3. An exam within 2 days → rest or a light walk.
+4. Whoop recovery: red (under 34 %) → rest; yellow (34–66 %) → easy zone-2 run;
+   green (67 %+) → gym. HRV 15 %+ below its 7-day average → rest. Resting HR 5+ bpm
+   above its 7-day average → one colour worse. (Averages need 3+ days of data.)
+5. Gym picks the muscle group furthest behind this week's targets
+   (Push 2, Pull 2, Legs 1, at least 3 sets each; max 4 gym sessions, week = Mon–Sun).
+   If more is left than gym days, groups are combined (e.g. Upper body = Push + Pull).
+   If the weekly gym target is met → run instead (runs + football target: 2/week).
+6. No Whoop data → decided from the week's progress alone.
+
+**Low energy mode.** 1 study block, dishes only, rest or a walk, so no day is a total zero.
+
 ## Install on iPhone
 
 To be written in step 7. Note: iPhone only allows offline mode for pages served
@@ -69,7 +103,7 @@ over HTTPS (or localhost), so step 7 will pick a way to serve it securely.
 
 1. Project setup ✅
 2. Data model and backups ✅
-3. Daily logic and tests
+3. Daily logic and tests ✅
 4. Today screen, timer and logging
 5. Settings
 6. Whoop laptop sync
