@@ -20,10 +20,12 @@
   <script src="../js/store.js"></script>
   <script src="../js/plan.js"></script>
   <script src="../js/today.js"></script>
+  <script src="../js/sync.js"></script>
   <script src="data.test.js"></script>
   <script src="plan.test.js"></script>
   <script src="today.test.js"></script>
   <script src="settings.test.js"></script>
+  <script src="sync.test.js"></script>
   <script>
     const ul = document.getElementById("results");
     function show(good, name, err) {
@@ -43,7 +45,9 @@
       const c = await window.runTodayTests(show);
       heading("Settings (store.js + plan.js)");
       const e = await window.runSettingsTests(show);
-      const passed = a.passed + b.passed + c.passed + e.passed, failed = a.failed + b.failed + c.failed + e.failed;
+      heading("Whoop laptop sync (sync.js)");
+      const f = await window.runSyncTests(show);
+      const passed = a.passed + b.passed + c.passed + e.passed + f.passed, failed = a.failed + b.failed + c.failed + e.failed + f.failed;
       const el = document.getElementById("summary");
       el.textContent = passed + " passed, " + failed + " failed";
       el.className = failed ? "fail" : "pass";

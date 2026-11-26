@@ -143,13 +143,34 @@ function renderSettings() {
         sField("Study block length (minutes)", sNum("study__blockMin", st.studyBlockMin))),
       h("p", { class: "muted small tight" }, "Used for the timer and \"Did it, log\" buttons from now on. Already logged sessions keep their minutes. Default 45."),
       h("button", { type: "button", class: "wide", "data-action": "set-study-save" }, "Save study block"),
-      msgLine("study")));
+      msgLine("study")),
+
+    syncCard());
 
   for (const [id, v] of Object.entries(keep)) {
     const el = document.getElementById(id);
     if (!el) continue;
     if (el.type === "checkbox") el.checked = v; else el.value = v;
   }
+}
+
+// Laptop sync (Whoop), step 6. Saved on this phone only (not in backups).
+function syncCard() {
+  const c = SY.getConfig(LS);
+  const shownKey = c ? c.key.match(/.{1,4}/g).join("-") : "";
+  return h("section", { class: "card" },
+    h("h2", {}, "Laptop sync (Whoop)"),
+    h("p", { class: "muted small tight" },
+      "When the laptop runs the Whoop sync and you're on the same Wi-Fi, the app fetches recovery, HRV, resting HR and sleep by itself. " +
+      "Numbers you typed are never overwritten. The laptop window shows the address and key (see sync/README.md)."),
+    h("div", { class: "field-row" },
+      sField("Laptop address", sInput("sync__address", c ? c.address : "", { placeholder: "192.168.1.23:8765", inputmode: "url", autocapitalize: "off" }), "grow")),
+    h("div", { class: "field-row" },
+      sField("Sync key", sInput("sync__key", shownKey, { placeholder: "ABCD-EFGH-JKMN", autocapitalize: "characters" }), "grow")),
+    h("div", { class: "btn-row" },
+      h("button", { type: "button", "data-action": "set-sync-save" }, c ? "Save & test" : "Save & test"),
+      c ? h("button", { type: "button", class: "secondary", "data-action": "set-sync-off" }, "Turn off") : null),
+    msgLine("sync"));
 }
 
 // ---------- saving ----------
@@ -235,6 +256,25 @@ const settingsActions = {
     const v = {};
     for (const k of ["gymMin", "gymMax", "push", "pull", "legs", "runs"]) v[k] = intVal("tgt__" + k);
     saveSetting("tgt", "Saved training targets", () => store.setSettings(v));
+  },
+  "set-sync-save": async () => {
+    try {
+      SY.setConfig(LS, val("sync__address"), val("sync__key"));
+    } catch (err) {
+      return formMsg("sync", err.message, true);
+    }
+    ui.justSaved = "sync";
+    render();
+    formMsg("sync", "Saved. Testing the connection…", false);
+    const r = await runSync(false);
+    if (r) formMsg("sync", (r.ok ? "Works! " : "Saved, but the test failed: ") + r.message, !r.ok);
+  },
+  "set-sync-off": () => {
+    if (!window.confirm("Turn off laptop sync on this phone? Whoop numbers already saved stay.")) return;
+    SY.clearConfig(LS);
+    ui.justSaved = "sync";
+    render();
+    formMsg("sync", "Laptop sync is off. Typing the numbers on Today still works.", false);
   },
   "set-study-save": () => {
     saveSetting("study", "Saved study block length", () => store.setSettings({ studyBlockMin: intVal("study__blockMin") }));

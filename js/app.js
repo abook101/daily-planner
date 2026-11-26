@@ -11,12 +11,14 @@
 //
 // Rules worth testing (timer, undo, low energy, week tally) live in
 // js/today.js and have their own tests; this file only draws and wires.
+// Whoop numbers from the laptop: rules in js/sync.js (tests/sync.test.js).
 // The Settings screen is drawn by js/settings.js (render() switches to it).
 "use strict";
 
 const store = PlannerData.createStore(window.localStorage);
 const L = PlannerLogic;
 const T = PlannerToday;
+const SY = PlannerSync;
 const LS = window.localStorage;
 
 // Things that only matter while the screen is open (which panel is open, etc.).
@@ -27,6 +29,7 @@ const ui = {
   editMetrics: false,
   open: {},              // which <details> sections are expanded
   justSaved: null,       // Settings: the form just saved (its fields are redrawn from the data)
+  syncing: false,        // a laptop sync is running right now
 };
 
 const today = () => PlannerData.toDateStr(new Date());
@@ -124,19 +127,47 @@ function renderHeader(plan) {
   if (u) pill.textContent = "↶ Undo last: " + u.label;
 }
 
+// The laptop sync line under the metrics: status + "Sync now".
+function syncFooter() {
+  if (!SY.getConfig(LS)) {
+    return h("p", { class: "muted small tight" }, "Whoop numbers can come from your laptop automatically: ",
+      h("button", { type: "button", class: "link inline", "data-action": "open-settings" }, "set up in Settings"), ".");
+  }
+  const st = SY.statusLine(LS, Date.now());
+  return h("div", { class: "sync-line" + (st.ok ? "" : " bad") },
+    h("span", { class: "small" }, ui.syncing ? "Syncing with laptop…" : st.text),
+    h("button", { type: "button", class: "link", "data-action": "sync-now", disabled: ui.syncing }, "Sync now"));
+}
+
+// You typed numbers today, and the laptop has different ones from Whoop.
+function whoopOfferBox(data, day) {
+  const w = SY.whoopOffer(data, SY.latestDays(LS), day);
+  if (!w) return null;
+  const parts = [w.recovery !== null && w.recovery + "%", w.hrv !== null && w.hrv + " ms", w.rhr !== null && w.rhr + " bpm"].filter(Boolean);
+  return h("div", { class: "offer" },
+    h("span", { class: "small" }, "Whoop says " + parts.join(" · ") + ". Your typed numbers are kept unless you switch."),
+    h("button", { type: "button", class: "secondary", "data-action": "metrics-use-whoop" }, "Use Whoop numbers"));
+}
+
 function renderMetrics(data, day) {
   const m = data.metrics[day] || null;
   const badge = m ? h("span", { class: "badge " + (m.source === "whoop" ? "whoop" : "") }, m.source === "whoop" ? "From Whoop" : "Typed in") : null;
   const head = h("div", { class: "card-head" }, h("h2", {}, "Morning metrics"), badge);
-  const show = (x, unit) => (x === null ? "–" : x + unit);
+  const show = (x, unit) => (x === null || x === undefined ? "–" : x + unit);
 
   if (m && !ui.editMetrics) {
+    const sleep = (m.sleepHours !== undefined && m.sleepHours !== null) || (m.sleepPerf !== undefined && m.sleepPerf !== null)
+      ? h("p", { class: "muted small tight" }, "Sleep " + show(m.sleepHours, " h") + (m.sleepPerf !== undefined && m.sleepPerf !== null ? " · " + m.sleepPerf + "% of need" : ""))
+      : null;
     fill("card-metrics", head,
       h("div", { class: "metric-row" },
         h("div", { class: "metric" }, h("b", {}, show(m.recovery, "%")), h("span", {}, "Recovery")),
         h("div", { class: "metric" }, h("b", {}, show(m.hrv, "")), h("span", {}, "HRV ms")),
         h("div", { class: "metric" }, h("b", {}, show(m.rhr, "")), h("span", {}, "Resting HR")),
-        h("button", { type: "button", class: "link", "data-action": "metrics-edit" }, "Edit")));
+        h("button", { type: "button", class: "link", "data-action": "metrics-edit" }, "Edit")),
+      sleep,
+      whoopOfferBox(data, day),
+      syncFooter());
     return;
   }
   const input = (id, label, value, ph) => h("label", { class: "field" }, h("span", {}, label),
@@ -149,7 +180,8 @@ function renderMetrics(data, day) {
       input("m-rhr", "Resting HR", m && m.rhr, "e.g. 52")),
     h("div", { class: "btn-row" },
       h("button", { type: "button", "data-action": "metrics-save" }, "Save"),
-      m ? h("button", { type: "button", class: "secondary", "data-action": "metrics-cancel" }, "Cancel") : null));
+      m ? h("button", { type: "button", class: "secondary", "data-action": "metrics-cancel" }, "Cancel") : null),
+    m ? null : syncFooter());
 }
 
 function renderTraining(plan, data, day) {
@@ -326,6 +358,11 @@ function saveGymSetsTyped() {
 const actions = {
   "metrics-edit": () => { ui.editMetrics = true; render(); },
   "metrics-cancel": () => { ui.editMetrics = false; render(); },
+  "metrics-use-whoop": () => {
+    const w = SY.whoopOffer(store.get(), SY.latestDays(LS), today());
+    if (w) act("Using Whoop numbers", () => SY.useWhoopFor(store, today(), w));
+  },
+  "sync-now": () => runSync(true),
   "metrics-save": () => {
     const recovery = T.parseNum(val("m-recovery")), hrv = T.parseNum(val("m-hrv")), rhr = T.parseNum(val("m-rhr"));
     if ([recovery, hrv, rhr].some(Number.isNaN)) return showToast("Numbers only, please.", false);
@@ -429,6 +466,31 @@ const actions = {
   },
 };
 
+// =====================================================================
+// Laptop sync (Whoop). Runs in the background; never blocks the screen.
+// =====================================================================
+
+async function runSync(manual) {
+  if (ui.syncing) return null;
+  ui.syncing = true;
+  if (!ui.editMetrics) render();
+  let r;
+  try {
+    r = await SY.syncNow({ store, storage: LS, fetchFn: (url, opts) => window.fetch(url, opts), nowMs: Date.now(), today: today() });
+  } finally {
+    ui.syncing = false;
+  }
+  const changed = r.ok && r.report && (r.report.added.length || r.report.updated.length);
+  if (manual || changed) showToast(r.message, false);
+  // Don't redraw while you're typing numbers (it would clear the boxes).
+  if (!ui.editMetrics || isSettingsView()) render();
+  return r;
+}
+
+function autoSync() {
+  if (!document.hidden && SY.shouldAutoSync(LS, Date.now())) runSync(false);
+}
+
 function setupEvents() {
   document.body.addEventListener("click", (e) => {
     const el = e.target.closest("[data-action]");
@@ -446,7 +508,7 @@ function setupEvents() {
     render();
   });
   // Coming back to the app (or another tab saved something): redraw.
-  document.addEventListener("visibilitychange", () => { if (!document.hidden) render(); });
+  document.addEventListener("visibilitychange", () => { if (!document.hidden) { render(); autoSync(); } });
   window.addEventListener("storage", () => render());
   // Gear / back button (and the phone's back gesture in a browser tab).
   window.addEventListener("hashchange", () => { render(); window.scrollTo(0, 0); });
@@ -501,3 +563,4 @@ setupBackupButtons();
 setupEvents();
 render();
 registerServiceWorker();
+autoSync();

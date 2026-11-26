@@ -19,3 +19,8 @@ backups/
 Thumbs.db
 Desktop.ini
 .DS_Store
+
+# Whoop sync (step 6): certificates (incl. private keys), downloaded data, temp files
+sync/certs/
+sync/whoop-data.json
+sync/*.tmp

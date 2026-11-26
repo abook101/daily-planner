@@ -24,10 +24,11 @@ All data stays on the phone (browser local storage).
 | `js/plan.js` | Daily plan logic: what to study, which chores, run/gym/rest |
 | `js/today.js` | Today screen rules: study timer, undo, low energy switch, week tally |
 | `js/settings.js` | The Settings screen (gear on Today) |
+| `js/sync.js` | Whoop numbers from the laptop: fetching and the merge rules |
 | `sw.js` | Service worker: stores the files on the phone so it works offline |
 | `manifest.webmanifest` | Name, icon and colours for "Add to Home Screen" |
 | `icons/` | App icons |
-| `sync/` | Laptop Python script for Whoop (step 6) |
+| `sync/` | Laptop Python program for Whoop (see `sync/README.md`) |
 | `tests/` | Automated tests (open `/tests/` in the browser) |
 
 ## Run it on the laptop
@@ -145,6 +146,22 @@ when you save one box.
 The targets and block length are saved in the data as `settings` (so they're in backups).
 Data from before step 5 has no `settings` and simply uses the defaults: no migration needed.
 
+## Whoop sync from the laptop (step 6)
+
+A Python program on the laptop (`sync/whoop_sync.py`, standard library only)
+downloads recovery, HRV, resting HR, sleep and workouts from Whoop's official API
+and serves them over https on the home Wi-Fi. The app fetches them by itself when
+opened at home (at most every 10 min; *Sync now* on Today forces it). Setup,
+everyday use and troubleshooting: **`sync/README.md`**.
+
+- Typed numbers are never overwritten. If Whoop's differ, Today shows "Whoop says …"
+  with a *Use Whoop numbers* button (it can be undone).
+- Whoop entries also keep sleep (`sleepHours`, `sleepPerf`), shown under the metrics.
+- Laptop address + sync key are saved in local storage `planner.sync` (this phone only,
+  not in backups); last result in `planner.syncStatus`, last Whoop numbers in
+  `planner.whoopLatest`.
+- Laptop off / away / not set up: nothing breaks, type the numbers as before.
+
 ## Install on iPhone
 
 To be written in step 7. Note: iPhone only allows offline mode for pages served
@@ -157,5 +174,5 @@ over HTTPS (or localhost), so step 7 will pick a way to serve it securely.
 3. Daily logic and tests ✅
 4. Today screen, timer and logging ✅
 5. Settings ✅
-6. Whoop laptop sync
+6. Whoop laptop sync ✅
 7. Tests, README and phone install

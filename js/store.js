@@ -96,7 +96,7 @@
         id, name, minDays, maxDays, lastDone: null,
       })),
       training: [],
-      metrics: {},   // { "2026-11-25": { recovery, hrv, rhr, source } }
+      metrics: {},   // { "2026-11-25": { recovery, hrv, rhr, source, sleepHours?, sleepPerf? } }
       checkoffs: {}, // { "2026-11-25": ["chore:dishes", "study:maths1:1"] }
       settings: clone(DEFAULT_SETTINGS),
     };
@@ -175,6 +175,9 @@
     if (m.hrv !== null && (!isNum(m.hrv) || m.hrv <= 0 || m.hrv > 300)) e.push(where + ": HRV must be 1–300 ms");
     if (m.rhr !== null && (!isNum(m.rhr) || m.rhr < 25 || m.rhr > 150)) e.push(where + ": resting HR must be 25–150 bpm");
     if (m.recovery === null && m.hrv === null && m.rhr === null) e.push(where + ": needs at least one value");
+    // Optional, only sent by the Whoop sync (step 6). Missing = not known.
+    if (m.sleepHours !== undefined && m.sleepHours !== null && (!isNum(m.sleepHours) || m.sleepHours < 0 || m.sleepHours > 24)) e.push(where + ": sleep must be 0–24 hours");
+    if (m.sleepPerf !== undefined && m.sleepPerf !== null && (!isNum(m.sleepPerf) || m.sleepPerf < 0 || m.sleepPerf > 100)) e.push(where + ": sleep performance must be 0–100");
     return e;
   }
 
@@ -666,7 +669,7 @@
 
   const api = {
     SCHEMA_VERSION, STUDY_BLOCK_MIN, GROUPS, DEFAULT_SETTINGS, NAME_MAX,
-    createStore, defaultData, validateData, validateSettings, settingsOf, migrate, MIGRATIONS,
+    createStore, defaultData, validateData, validateSettings, validateMetric, settingsOf, migrate, MIGRATIONS,
     isDateStr, toDateStr, downloadBackup, importBackupFile,
   };
 
