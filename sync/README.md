@@ -66,8 +66,8 @@ the app stays private to you.
 python sync/whoop_sync.py setup
 ```
 
-Paste the Client ID, then the Client Secret (typing is hidden for the secret:
-paste with right-click or Ctrl+V and press Enter). Your browser opens Whoop's
+Paste the Client ID, then the Client Secret (right-click or Ctrl+V, once, then
+press Enter; running it again, just press Enter to keep a saved value). Your browser opens Whoop's
 "Allow access?" page: press **Allow**. The terminal then shows a table of your
 last days. These are saved in `sync/config.json` and `sync/tokens.json`, which
 git ignores, so they never end up in the project history.

@@ -96,6 +96,11 @@ def load_config():
     cfg = read_json(CONFIG_FILE)
     if not cfg or not cfg.get("client_id") or not cfg.get("client_secret"):
         raise SyncError("Not set up yet. Run:  python sync/whoop_sync.py setup")
+    for k, what in (("client_id", "Client ID"), ("client_secret", "Client Secret")):
+        try:
+            clean_key_text(cfg[k], what)
+        except SyncError as err:
+            raise SyncError(str(err).replace("Run setup again", "Run  python sync/whoop_sync.py setup  again"))
     if not cfg.get("sync_key"):
         cfg["sync_key"] = new_sync_key()
         write_json(CONFIG_FILE, cfg)
@@ -667,16 +672,29 @@ It was made on your laptop and works only for it.</p>
 
 # =============================================================== setup + status
 
+def clean_key_text(text, what):
+    """Client ID / Secret as typed or pasted: spaces trimmed. Invisible control
+    characters (which some terminals add when pasting) are refused with a clear message."""
+    t = (text or "").strip()
+    bad = [ch for ch in t if not ch.isprintable() or ch.isspace()]
+    if bad:
+        raise SyncError("The %s has %d invisible or space character(s) in it, so it got mangled while pasting. "
+                        "Run setup again and paste it once (right-click paste), then press Enter." % (what, len(bad)))
+    return t
+
+
 def setup():
     print("Whoop sync setup. You need the Client ID and Client Secret from")
     print("https://developer-dashboard.whoop.com (see sync/README.md, step 1).\n")
     cfg = dict(DEFAULTS, **(read_json(CONFIG_FILE) or {}))
-    import getpass
-    cid = input("Client ID%s: " % (" [keep current]" if cfg.get("client_id") else "")).strip()
+    cid = clean_key_text(input("Client ID%s: " % (" [Enter = keep current]" if cfg.get("client_id") else "")), "Client ID")
     if cid:
         cfg["client_id"] = cid
-    secret = getpass.getpass("Client Secret (typing is hidden; paste and press Enter)%s: "
-                             % (" [keep current]" if cfg.get("client_secret") else "")).strip()
+    # Shown while typing on purpose: hidden input on Windows can silently add
+    # invisible characters (e.g. from Ctrl+V or Backspace), which breaks the login.
+    print("Paste the Client Secret (right-click or Ctrl+V), then press Enter. It's only saved on this laptop.")
+    secret = clean_key_text(input("Client Secret%s: " % (" [Enter = keep current]" if cfg.get("client_secret") else "")),
+                            "Client Secret")
     if secret:
         cfg["client_secret"] = secret
     if not cfg.get("client_id") or not cfg.get("client_secret"):

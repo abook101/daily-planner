@@ -292,6 +292,12 @@ class TestLogin(TempFiles):
 
 
 class TestSmallThings(unittest.TestCase):
+    def test_mangled_paste_is_refused_clearly(self):
+        self.assertEqual(W.clean_key_text("  abc123  ", "Client Secret"), "abc123")
+        with self.assertRaises(W.SyncError) as e:
+            W.clean_key_text("abc\x01def\x7f", "Client Secret")
+        self.assertIn("2 invisible", str(e.exception))
+
     def test_sync_key_is_easy_to_type(self):
         k = W.new_sync_key()
         self.assertRegex(k, r"^[2-9A-HJKMNP-Z]{4}-[2-9A-HJKMNP-Z]{4}-[2-9A-HJKMNP-Z]{4}$")
