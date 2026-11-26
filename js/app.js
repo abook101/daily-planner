@@ -20,6 +20,8 @@ const L = PlannerLogic;
 const T = PlannerToday;
 const SY = PlannerSync;
 const LS = window.localStorage;
+// Shown at the bottom of Today. Must match CACHE_VERSION in sw.js (a test checks it).
+const APP_VERSION = "8";
 
 // Things that only matter while the screen is open (which panel is open, etc.).
 const ui = {
@@ -561,12 +563,12 @@ function setupBackupButtons() {
 function registerServiceWorker() {
   const status = document.getElementById("offline-status");
   if (!("serviceWorker" in navigator)) {
-    status.textContent = "Offline mode not supported in this browser.";
+    status.textContent = "Version " + APP_VERSION + " · Offline mode not supported in this browser.";
     return;
   }
   navigator.serviceWorker.register("sw.js")
-    .then(() => { status.textContent = "Ready to work offline."; })
-    .catch((err) => { status.textContent = "Offline mode failed: " + err.message; });
+    .then(() => { status.textContent = "Version " + APP_VERSION + " · Ready to work offline."; })
+    .catch((err) => { status.textContent = "Version " + APP_VERSION + " · Offline mode failed: " + err.message; });
 }
 
 loadData();

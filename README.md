@@ -26,7 +26,7 @@ All data stays on the phone (browser local storage).
 | `js/today.js` | Today screen rules: study timer, undo, low energy switch, week tally |
 | `js/settings.js` | The Settings screen (gear on Today) |
 | `js/sync.js` | Whoop numbers from the laptop: fetching and the merge rules |
-| `sw.js` | Service worker: stores the files on the phone so it works offline |
+| `sw.js` | Service worker: stores the files on the phone so it works offline (internet first, stored copy when offline) |
 | `manifest.webmanifest` | Name, icon and colours for "Add to Home Screen" |
 | `icons/` | App icons |
 | `privacy.html` | Short privacy page (also linked from the Whoop developer app) |
@@ -47,13 +47,15 @@ Then open http://localhost:8000 in a browser. Stop it with Ctrl+C.
 
 ## Updating the app
 
-When you change any file, open `sw.js` and bump `CACHE_VERSION`
-(e.g. `planner-v1` to `planner-v2`). Otherwise the phone keeps showing the old copy.
+When you change any file, bump `CACHE_VERSION` in `sw.js` (e.g. `planner-v8` to
+`planner-v9`) and `APP_VERSION` in `js/app.js` (`"8"` to `"9"`); a test checks they match.
+The version shows at the bottom of Today, so you can see which one the phone runs.
 A new app file must also be added to the `FILES` list in `sw.js` (that list is
 also what gets published, see below).
 
-Then publish (see *Put it online*). The phone picks up the new version the next
-time the app is opened with internet, then closed and opened again.
+Then publish (see *Put it online*). The app loads its files from the internet
+first when it can (stored copy when offline), so the phone shows the new version
+the next time it's opened with internet.
 
 ## How data is stored
 
@@ -180,7 +182,7 @@ All of these need nothing installed except Python (and Node, optional):
 | App (in the browser) | `python -m http.server 8000`, open http://localhost:8000/tests/ | 108 |
 | App (Node) | `node tests/data.test.js` (and `plan`, `today`, `settings`, `sync`) | 108 |
 | Laptop sync | `python sync/test_whoop_sync.py` | 21 |
-| Website has no private files | `python tools/test_build_site.py` | 3 |
+| Website has no private files | `python tools/test_build_site.py` | 4 |
 
 GitHub also runs all of them on every push and only publishes if they pass.
 
@@ -214,8 +216,8 @@ Settings → Pages → *Source: GitHub Actions*.
 5. Had data on another device/browser? There: *Export backup*. On the phone:
    *Import backup*.
 
-Updates arrive by themselves: open the app with internet, close it fully
-(swipe it away), open it again.
+Updates arrive by themselves the next time you open the app with internet.
+Check the version number at the bottom of Today.
 
 ## Whoop sync starts with Windows (optional)
 

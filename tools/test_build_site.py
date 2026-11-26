@@ -42,6 +42,14 @@ class TestSite(unittest.TestCase):
         for ref in re.findall(r'(?:src|href)="([^"#:]+)"', html):
             self.assertIn(ref, files, "index.html uses %s but sw.js doesn't list it" % ref)
 
+    def test_version_shown_in_the_app_matches_the_offline_cache(self):
+        import re
+        sw = (build_site.ROOT / "sw.js").read_text(encoding="utf-8")
+        app = (build_site.ROOT / "js" / "app.js").read_text(encoding="utf-8")
+        cache = re.search(r'CACHE_VERSION = "planner-v(\d+)"', sw).group(1)
+        shown = re.search(r'APP_VERSION = "(\d+)"', app).group(1)
+        self.assertEqual(cache, shown, "Bump APP_VERSION in js/app.js together with CACHE_VERSION in sw.js")
+
     def test_private_files_are_not_tracked_by_git(self):
         try:
             tracked = subprocess.run(["git", "ls-files"], cwd=build_site.ROOT, capture_output=True,
