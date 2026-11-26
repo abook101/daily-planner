@@ -213,6 +213,28 @@ class TestCertsAndServer(TempFiles):
         self.assertNotEqual((W.CERT_DIR / "server.crt").read_text(), srv_before)
         self.assertIn("192.168.1.40", W.read_json(W.CERT_DIR / "server.json")["ips"])
 
+    def test_new_wifi_address_while_running_switches_certificate(self):
+        class FakeCtx:
+            loaded = []
+            def load_cert_chain(self, crt, key):
+                self.loaded.append(crt)
+        ctx = FakeCtx()
+        # Started before Wi-Fi was up: no address yet.
+        W.ensure_certs([], now=NOW)
+        known = W.update_cert_if_address_changed(ctx, [], 8765, lan_fn=lambda: [], now=NOW)
+        self.assertEqual(known, [])
+        self.assertEqual(ctx.loaded, [])
+        # Wi-Fi comes up: new certificate covering it, loaded without a restart.
+        known = W.update_cert_if_address_changed(ctx, known, 8765, lan_fn=lambda: ["192.168.1.23"], now=NOW)
+        self.assertEqual(known, ["192.168.1.23"])
+        self.assertEqual(len(ctx.loaded), 1)
+        self.assertIn("192.168.1.23", json.loads((W.CERT_DIR / "server.json").read_text())["ips"])
+        # Same address a minute later: nothing to do.
+        W.update_cert_if_address_changed(ctx, known, 8765, lan_fn=lambda: ["192.168.1.23"], now=NOW)
+        self.assertEqual(len(ctx.loaded), 1)
+        # Wi-Fi drops for a moment: keep the certificate.
+        self.assertEqual(W.update_cert_if_address_changed(ctx, known, 8765, lan_fn=lambda: [], now=NOW), known)
+
     def test_phone_request_over_https_with_key(self):
         srv_crt, srv_key, ca_crt = W.ensure_certs([])
         payload = {"app": "daily-planner-whoop", "version": 1, "days": {"2026-11-26": {"recovery": 72}}, "workouts": []}

@@ -107,6 +107,12 @@ forces it).
 
 - Start the sync: double-click `sync/start-whoop-sync.bat`. Leave the window open
   (minimised is fine). Closing it stops the sync.
+- **Start it automatically with Windows:** double-click `sync/autostart-on.bat` once.
+  The window then opens minimised every time you log in.
+  **Undo:** double-click `sync/autostart-off.bat`.
+- The laptop must be on and awake for the phone to get the numbers.
+- If the laptop's Wi-Fi address changes while the sync runs, it makes a new
+  certificate by itself within a minute and shows the new address in the window.
 - Check what's set up: `python sync/whoop_sync.py status`
 - Download now and look at the numbers: `python sync/whoop_sync.py fetch`
 
@@ -128,7 +134,8 @@ forces it).
 | `whoop_sync.py` | The program (login, download, https server, iPhone setup page) |
 | `localcert.py` | Makes the home-made https certificates with plain Python |
 | `start-whoop-sync.bat` | Double-click to start the sync |
-| `test_whoop_sync.py` | Tests with a fake Whoop: `python sync/test_whoop_sync.py` |
+| `autostart-on.bat` / `autostart-off.bat` | Start the sync with Windows / stop doing that |
+| `test_whoop_sync.py` | Tests with a fake Whoop: `python sync/test_whoop_sync.py` (21 tests) |
 | `config.json`, `tokens.json`, `certs/`, `whoop-data.json` | **Private**, made by the program, ignored by git. Never share them. |
 
 Whoop data is downloaded for the last 14 days. Workouts are saved in

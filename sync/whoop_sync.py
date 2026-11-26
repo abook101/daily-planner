@@ -491,6 +491,21 @@ def ensure_certs(ips, now=None):
     return srv_crt, srv_key, ca_crt
 
 
+def update_cert_if_address_changed(ctx, known_ips, port, lan_fn=None, now=None):
+    """Called every minute by serve(). If the laptop got a new Wi-Fi address
+    (started before Wi-Fi was up, router restart, other network), makes a
+    certificate that covers it and switches to it without restarting.
+    Returns the addresses the current certificate covers."""
+    ips = (lan_fn or lan_addresses)()
+    if not ips or set(ips) <= set(known_ips):
+        return known_ips
+    srv_crt, srv_key, _ = ensure_certs(ips, now=now)
+    ctx.load_cert_chain(str(srv_crt), str(srv_key))
+    for ip in ips:
+        log("Laptop address is now %s:%d (if the app can't reach the laptop, use this in its Settings)." % (ip, port))
+    return ips
+
+
 # =============================================================== the sync server
 
 class SyncState:
@@ -596,8 +611,13 @@ def serve(cfg):
     server.socket = ctx.wrap_socket(server.socket, server_side=True, do_handshake_on_connect=False)
 
     def background():
+        known = ips
         while True:
             time.sleep(60)
+            try:
+                known = update_cert_if_address_changed(ctx, known, cfg["sync_port"])
+            except Exception as err:  # never let this stop the Whoop downloads
+                log("Couldn't update the certificate for a new address: %s" % err)
             state.refresh_if_old(int(cfg["refresh_minutes"]) * 60)
 
     threading.Thread(target=background, daemon=True).start()

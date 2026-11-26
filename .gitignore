@@ -24,3 +24,6 @@ Desktop.ini
 sync/certs/
 sync/whoop-data.json
 sync/*.tmp
+
+# Website build output (made by tools/build_site.py)
+_site/

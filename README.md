@@ -1,10 +1,11 @@
 # Daily Planner
 
 A personal planner that runs on my iPhone home screen and works offline.
+Live at **https://abook101.github.io/daily-planner/** (see *Put it online* below).
 Plain HTML, CSS and JavaScript: no frameworks, no build step, no installs.
 All data stays on the phone (browser local storage).
 
-## What it will do
+## What it does
 
 - Exam countdowns for my 6 subjects
 - 45-minute study blocks with a timer
@@ -28,8 +29,11 @@ All data stays on the phone (browser local storage).
 | `sw.js` | Service worker: stores the files on the phone so it works offline |
 | `manifest.webmanifest` | Name, icon and colours for "Add to Home Screen" |
 | `icons/` | App icons |
+| `privacy.html` | Short privacy page (also linked from the Whoop developer app) |
 | `sync/` | Laptop Python program for Whoop (see `sync/README.md`) |
 | `tests/` | Automated tests (open `/tests/` in the browser) |
+| `tools/build_site.py` | Copies only the app files into `_site/` for the website |
+| `.github/workflows/pages.yml` | Runs all tests and publishes the website on every push |
 
 ## Run it on the laptop
 
@@ -45,6 +49,11 @@ Then open http://localhost:8000 in a browser. Stop it with Ctrl+C.
 
 When you change any file, open `sw.js` and bump `CACHE_VERSION`
 (e.g. `planner-v1` to `planner-v2`). Otherwise the phone keeps showing the old copy.
+A new app file must also be added to the `FILES` list in `sw.js` (that list is
+also what gets published, see below).
+
+Then publish (see *Put it online*). The phone picks up the new version the next
+time the app is opened with internet, then closed and opened again.
 
 ## How data is stored
 
@@ -162,10 +171,77 @@ everyday use and troubleshooting: **`sync/README.md`**.
   `planner.whoopLatest`.
 - Laptop off / away / not set up: nothing breaks, type the numbers as before.
 
+## Run the tests
+
+All of these need nothing installed except Python (and Node, optional):
+
+| What | How | Count |
+|---|---|---|
+| App (in the browser) | `python -m http.server 8000`, open http://localhost:8000/tests/ | 107 |
+| App (Node) | `node tests/data.test.js` (and `plan`, `today`, `settings`, `sync`) | 107 |
+| Laptop sync | `python sync/test_whoop_sync.py` | 21 |
+| Website has no private files | `python tools/test_build_site.py` | 3 |
+
+GitHub also runs all of them on every push and only publishes if they pass.
+
+## Put it online (GitHub Pages, free)
+
+iPhone only allows offline mode and "Add to Home Screen" apps for **https** pages,
+so the app is hosted on GitHub Pages: **https://abook101.github.io/daily-planner/**
+
+- The GitHub repository is **public** (free Pages needs that). It holds the code only.
+  Your planner data is on the phone, and the Whoop settings, login tokens,
+  certificates and Whoop data are ignored by git (`.gitignore`), so they're never
+  uploaded. `tools/test_build_site.py` fails if one of them is ever tracked.
+- The **website** only gets the app files listed in `sw.js` plus `sw.js` and
+  `privacy.html` (`tools/build_site.py`). Nothing from `sync/`, `tests/` or `tools/`.
+- Publishing = pushing to `main` on GitHub. The *Publish app* workflow
+  (`.github/workflows/pages.yml`) runs all tests, then publishes. Takes ~1 minute.
+  See it under the repository's **Actions** tab (green tick = live).
+
+One-time GitHub setup (done in step 7): repository `abook101/daily-planner`,
+Settings → Pages → *Source: GitHub Actions*.
+
 ## Install on iPhone
 
-To be written in step 7. Note: iPhone only allows offline mode for pages served
-over HTTPS (or localhost), so step 7 will pick a way to serve it securely.
+1. iPhone in **Safari** (must be Safari): open https://abook101.github.io/daily-planner/
+2. Tap the **Share** button (square with an arrow) → scroll → **Add to Home Screen** →
+   name *Planner* → **Add**.
+3. Open **Planner from the home screen** (not Safari) once while online. The footer
+   says it's ready for offline use. From then on it works in airplane mode too.
+4. The home-screen app has its **own** storage, separate from Safari. Set it up
+   (Settings, laptop sync) inside the home-screen app.
+5. Had data on another device/browser? There: *Export backup*. On the phone:
+   *Import backup*.
+
+Updates arrive by themselves: open the app with internet, close it fully
+(swipe it away), open it again.
+
+## Whoop sync starts with Windows (optional)
+
+Double-click **`sync/autostart-on.bat`** once. It puts one small file,
+`Daily Planner Whoop sync.bat`, in your Windows Startup folder
+(`%APPDATA%\Microsoft\Windows\Start Menu\Programs\Startup`). From then on,
+each time you log in to Windows, the sync window opens minimised in the taskbar.
+If Wi-Fi isn't connected yet at login, the sync notices the address within
+a minute and makes a matching certificate by itself.
+
+**To remove it:** double-click **`sync/autostart-off.bat`** (or press Win+R, type
+`shell:startup`, Enter, and delete `Daily Planner Whoop sync.bat`). Close the
+sync window (or restart) to stop the one that's running now.
+
+Note: the sync only works while the laptop is **on and awake**. If it sleeps,
+type the numbers on the phone as before.
+
+## Backup and restore
+
+- **Backup:** Today → Backup card → *Export backup*. On iPhone, choose *Save to Files*
+  (iCloud Drive is good). Do it weekly: iPhone can clear website data of apps not
+  opened for a few weeks.
+- **Restore:** *Import backup* → pick the file → check the summary → confirm.
+  What you had before is kept as `planner.backup.before-import`.
+- Laptop sync settings (address and key) are not in backups: retype them after
+  a restore on a new phone.
 
 ## Build steps
 
@@ -175,4 +251,4 @@ over HTTPS (or localhost), so step 7 will pick a way to serve it securely.
 4. Today screen, timer and logging ✅
 5. Settings ✅
 6. Whoop laptop sync ✅
-7. Tests, README and phone install
+7. Tests, README, website and phone install ✅

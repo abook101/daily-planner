@@ -1,0 +1,47 @@
+# Publishes the app to GitHub Pages every time main changes, but only if all tests pass.
+# Only the app's own files are published (see tools/build_site.py), never sync/ or tests/.
+name: Publish app
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: App tests
+        run: for f in tests/*.test.js; do node "$f" || exit 1; done
+      - name: Laptop sync tests
+        run: python3 sync/test_whoop_sync.py
+      - name: Website check (no private files)
+        run: python3 tools/test_build_site.py
+      - name: Build the website folder
+        run: python3 tools/build_site.py
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
