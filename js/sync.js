@@ -123,6 +123,15 @@
     return v;
   }
 
+  // Most recent earlier day with Whoop numbers (for "today isn't scored yet").
+  function lastWhoopDay(data, today) {
+    const oldest = addDays(today, -MAX_AGE_DAYS);
+    const dates = Object.keys(data.metrics || {}).filter((d) => d < today && d >= oldest && data.metrics[d].source === "whoop").sort();
+    if (!dates.length) return null;
+    const date = dates[dates.length - 1];
+    return Object.assign({ date }, data.metrics[date]);
+  }
+
   // Replace your typed numbers for a day with Whoop's (only when you tap the button).
   function useWhoopFor(store, date, numbers) {
     return store.update((d) => {
@@ -247,7 +256,7 @@
 
   const api = {
     PAYLOAD_APP, PAYLOAD_VERSION, MAX_AGE_DAYS, DEFAULT_PORT, KEYS,
-    parsePayload, mergeWhoop, applyWhoop, whoopOffer, useWhoopFor,
+    parsePayload, mergeWhoop, applyWhoop, whoopOffer, useWhoopFor, lastWhoopDay,
     normalizeKey, normalizeAddress, getConfig, setConfig, clearConfig, syncUrl,
     getStatus, shouldAutoSync, syncNow, statusLine, latestDays,
   };

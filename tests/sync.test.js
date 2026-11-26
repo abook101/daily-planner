@@ -210,6 +210,19 @@
     eq(laptop.calls.length, 0);
   });
 
+  test("lastWhoopDay: newest earlier Whoop day, ignores typed days, today and old days", () => {
+    const store = newStore();
+    S.applyWhoop(store, { "2026-11-22": day(50, 66, 66), "2026-11-23": day(78, 79, 61) }, TODAY);
+    const data = store.get();
+    data.metrics["2026-11-24"] = { source: "manual", recovery: 10, hrv: 10, rhr: 90 };
+    const last = S.lastWhoopDay(data, TODAY);
+    eq(last.date, "2026-11-23");
+    eq(last.recovery, 78);
+    data.metrics["2026-10-01"] = { source: "whoop", recovery: 1, hrv: 1, rhr: 1 };
+    eq(S.lastWhoopDay({ metrics: { "2026-10-01": data.metrics["2026-10-01"] } }, TODAY), null);
+    eq(S.lastWhoopDay({ metrics: {} }, TODAY), null);
+  });
+
   // ---- run ----
   async function run_(log) {
     let passed = 0, failed = 0;

@@ -149,6 +149,17 @@ function whoopOfferBox(data, day) {
     h("button", { type: "button", class: "secondary", "data-action": "metrics-use-whoop" }, "Use Whoop numbers"));
 }
 
+// Nothing for today yet. If Whoop synced earlier days, say so, so it doesn't look broken.
+function noMetricsNote(data, day) {
+  const last = SY.getConfig(LS) ? SY.lastWhoopDay(data, day) : null;
+  if (!last) return h("p", { class: "muted small tight" }, "No Whoop data yet today. Type what the Whoop app shows (any you have).");
+  const when = new Date(last.date + "T12:00").toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short" });
+  const parts = [last.recovery != null && last.recovery + "%", last.hrv != null && "HRV " + last.hrv, last.rhr != null && "RHR " + last.rhr].filter(Boolean);
+  return h("div", {},
+    h("p", { class: "muted small tight" }, "Whoop hasn't scored today yet (it does after you wake up and your sleep ends). It fills in by itself on the next sync, or type the numbers now."),
+    h("p", { class: "muted small tight" }, "Last from Whoop: " + when + " · " + parts.join(" · ")));
+}
+
 function renderMetrics(data, day) {
   const m = data.metrics[day] || null;
   const badge = m ? h("span", { class: "badge " + (m.source === "whoop" ? "whoop" : "") }, m.source === "whoop" ? "From Whoop" : "Typed in") : null;
@@ -173,7 +184,7 @@ function renderMetrics(data, day) {
   const input = (id, label, value, ph) => h("label", { class: "field" }, h("span", {}, label),
     h("input", { id, type: "text", inputmode: "decimal", autocomplete: "off", placeholder: ph, value: value === null || value === undefined ? "" : String(value) }));
   fill("card-metrics", head,
-    m ? null : h("p", { class: "muted small tight" }, "No Whoop data yet today. Type what the Whoop app shows (any you have)."),
+    m ? null : noMetricsNote(data, day),
     h("div", { class: "field-row" },
       input("m-recovery", "Recovery %", m && m.recovery, "e.g. 72"),
       input("m-hrv", "HRV (ms)", m && m.hrv, "e.g. 64"),

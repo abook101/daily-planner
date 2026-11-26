@@ -177,8 +177,8 @@ All of these need nothing installed except Python (and Node, optional):
 
 | What | How | Count |
 |---|---|---|
-| App (in the browser) | `python -m http.server 8000`, open http://localhost:8000/tests/ | 107 |
-| App (Node) | `node tests/data.test.js` (and `plan`, `today`, `settings`, `sync`) | 107 |
+| App (in the browser) | `python -m http.server 8000`, open http://localhost:8000/tests/ | 108 |
+| App (Node) | `node tests/data.test.js` (and `plan`, `today`, `settings`, `sync`) | 108 |
 | Laptop sync | `python sync/test_whoop_sync.py` | 21 |
 | Website has no private files | `python tools/test_build_site.py` | 3 |
 
