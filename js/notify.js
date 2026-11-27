@@ -10,7 +10,11 @@
 //
 // What counts as important (all can be switched off in Settings):
 //   reminder  your Reminders: at their time (10 min before by default), or at
-//             the morning time if a reminder has no time
+//             the morning time if a reminder has no time. Reminders marked Done
+//             for a day are left out of that day.
+//   nag       all-day reminders (no time) notify again every hour after the morning
+//             time, until the hourly end time (22:00), until you mark them Done.
+//             Reminders with "carry over" come back the next day until Done.
 //   digest    one morning summary: study blocks, chores, reminders and today's training
 //   study     an evening nudge when no study is logged yet today
 //   timer     when a running study timer reaches its block length
@@ -37,8 +41,8 @@
   const RESEND_MS = 6 * 3600000;            // upload again after 6 h even if nothing changed
   const RETRY_MS = 60000;                   // after an error, wait a minute before trying again
   const TIMEOUT_MS = 15000;
-  const DEFAULT_KINDS = { reminder: true, digest: true, study: true, timer: true };
-  const DEFAULTS = { morning: "08:00", study: "18:00", lead: 10 };
+  const DEFAULT_KINDS = { reminder: true, digest: true, study: true, timer: true, hourly: true };
+  const DEFAULTS = { morning: "08:00", study: "18:00", lead: 10, hourlyEnd: "22:00" };
 
   // ---------- small helpers ----------
   const isTime = (t) => /^([01]\d|2[0-3]):[0-5]\d$/.test(String(t));
@@ -72,6 +76,7 @@
       url: c.url, key: c.key,
       morning: isTime(c.morning) ? c.morning : DEFAULTS.morning,
       study: isTime(c.study) ? c.study : DEFAULTS.study,
+      hourlyEnd: isTime(c.hourlyEnd) ? c.hourlyEnd : DEFAULTS.hourlyEnd,
       lead: Number.isInteger(c.lead) && c.lead >= 0 && c.lead <= 120 ? c.lead : DEFAULTS.lead,
       kinds: Object.assign({}, DEFAULT_KINDS, c.kinds || {}),
     };
@@ -86,11 +91,13 @@
     const morning = input.morning || DEFAULTS.morning, study = input.study || DEFAULTS.study;
     if (!isTime(morning)) throw new Error("Morning time must look like 08:00.");
     if (!isTime(study)) throw new Error("Study reminder time must look like 18:00.");
+    const hourlyEnd = input.hourlyEnd || DEFAULTS.hourlyEnd;
+    if (!isTime(hourlyEnd)) throw new Error("\"Hourly until\" must look like 22:00.");
     const lead = input.lead === "" || input.lead === undefined || input.lead === null ? DEFAULTS.lead : Number(input.lead);
     if (!Number.isInteger(lead) || lead < 0 || lead > 120) throw new Error("\"Minutes before\" must be a whole number from 0 to 120.");
     const kinds = Object.assign({}, DEFAULT_KINDS, input.kinds || {});
     const prev = getConfig(storage);
-    storage.setItem(KEYS.CONFIG, JSON.stringify({ url, key, morning, study, lead, kinds }));
+    storage.setItem(KEYS.CONFIG, JSON.stringify({ url, key, morning, study, hourlyEnd, lead, kinds }));
     // A different Worker (or key) means the phone must subscribe again.
     if (!prev || prev.url !== url || prev.key !== key) storage.removeItem(KEYS.STATUS);
     return getConfig(storage);
@@ -114,16 +121,38 @@
     const keep = (at) => at >= nowMs - LATE_MS;
     const lastDay = addDays(today, WINDOW_DAYS - 1);
 
-    // reminders (every day of a multi-day reminder)
+    // reminders: every day of a multi-day reminder, minus the days marked Done; plus
+    // reminders carried over from an earlier day; plus the hourly nags for all-day ones
+    const tomorrow = addDays(today, 1);
+    const nags = (r, d, title) => {
+      if (!config.kinds.hourly || r.hourly === false || d > tomorrow) return;
+      const end = localAt(d, config.hourlyEnd);
+      for (let t = localAt(d, config.morning) + 3600000, n = 1; t <= end; t += 3600000, n++) {
+        if (t <= nowMs) continue;   // a nag that is due now or already late is not worth sending
+        events.push({ id: "nag:" + r.id + ":" + d + ":" + n, kind: "nag", title, body: "Still open. Open the planner and tap Done.", at: t, notifyAt: t, notify: true, widget: false });
+      }
+    };
     if (config.kinds.reminder) {
       for (const r of data.reminders || []) {
-        const end = r.endDate || r.startDate;
-        for (let d = r.startDate < today ? today : r.startDate; d <= end && d <= lastDay; d = addDays(d, 1)) {
+        const last = r.endDate || r.startDate;
+        const done = r.doneDates || [];
+        for (let d = r.startDate < today ? today : r.startDate; d <= last && d <= lastDay; d = addDays(d, 1)) {
+          if (done.includes(d)) continue;
           const at = localAt(d, r.time || config.morning);
           const notifyAt = r.time ? at - config.lead * 60000 : at;
-          if (!keep(Math.max(at, notifyAt))) continue;
-          const where = [r.time, r.location].filter(Boolean).join(" · ");
-          events.push({ id: "rem:" + r.id + ":" + d, kind: "reminder", title: r.name, body: [where, r.description].filter(Boolean).join(" — "), at, notifyAt, notify: true });
+          if (keep(Math.max(at, notifyAt))) {
+            const where = [r.time, r.location].filter(Boolean).join(" · ");
+            events.push({ id: "rem:" + r.id + ":" + d, kind: "reminder", title: r.name, body: [where, r.description].filter(Boolean).join(" — "), at, notifyAt, notify: true });
+          }
+          if (!r.time) nags(r, d, r.name);
+        }
+        if (r.carryOver) {
+          for (const d of [today, tomorrow]) {
+            if (P.reminderState(r, d) !== "carried") continue;
+            const at = localAt(d, config.morning);
+            if (keep(at)) events.push({ id: "rem:" + r.id + ":" + d, kind: "reminder", title: r.name, body: "Carried over from " + last + ". " + (r.description || ""), at, notifyAt: at, notify: true });
+            nags(r, d, r.name);
+          }
         }
       }
     }
@@ -139,7 +168,7 @@
           if (blocks.length) parts.push("Study: " + list([...new Set(blocks.map((b) => b.subjectName))]));
           const chores = plan.chores.chores.filter((c) => !c.done).map((c) => c.name);
           if (chores.length) parts.push("Chores: " + list(chores));
-          const rems = (data.reminders || []).filter((r) => r.startDate <= d && d <= (r.endDate || r.startDate));
+          const rems = (data.reminders || []).filter((r) => ["open", "carried"].includes(P.reminderState(r, d)));
           if (rems.length) parts.push(rems.length + " reminder" + (rems.length === 1 ? "" : "s"));
           if (d === today && plan.training && plan.training.label) parts.push(plan.training.label);
           if (parts.length) events.push({ id: "digest:" + d, kind: "digest", title: d === today ? "Today's plan" : "Your plan for today", body: parts.join(" · "), at, notifyAt: at, notify: true });
@@ -165,7 +194,13 @@
 
     const next = L.nextExam(data.subjects, today);
     const exam = next ? { name: next.name, at: localAt(next.examDate, EXAM_HOUR) } : null;
-    return { events, exam };
+
+    // The widget's "Today" list: open all-day reminders (and carried-over ones) for the whole day.
+    const items = (data.reminders || [])
+      .filter((r) => { const st = P.reminderState(r, today); return st === "carried" || (st === "open" && !r.time); })
+      .map((r) => ({ title: r.name, carried: P.reminderState(r, today) === "carried" }))
+      .slice(0, 10);
+    return { events, exam, today: { day: today, items } };
   }
 
   // ---------- talking to the Worker ----------
@@ -294,7 +329,7 @@
       "const now = Date.now();",
       "const upcoming = j ? (j.events || []).filter((e) => e.at > now) : [];",
       "const ev = upcoming[0], then = upcoming[1];",
-      "const LABELS = { reminder: 'REMINDER', digest: 'DASHBOARD', study: 'STUDY', timer: 'STUDY TIMER' };",
+      "const LABELS = { reminder: 'REMINDER', digest: 'DASHBOARD', study: 'STUDY', timer: 'STUDY TIMER', nag: 'REMINDER' };",
       "const hm = (ms) => new Date(ms).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });",
       "const exam = j && j.exam && j.exam.at > now ? j.exam : null;",
       "const w = new ListWidget();",
@@ -313,6 +348,16 @@
       "  d.font = Font.boldMonospacedSystemFont(26); d.textColor = new Color('#22c55e');",
       "  small(hm(ev.at) + (ev.body ? ' · ' + ev.body : ''));",
       "  if (then) small('Then ' + hm(then.at) + ' · ' + then.title, '#6b7280');",
+      "}",
+      "const pad = (n) => String(n).padStart(2, '0');",
+      "const d0 = new Date();",
+      "const localDay = d0.getFullYear() + '-' + pad(d0.getMonth() + 1) + '-' + pad(d0.getDate());",
+      "const todayItems = j && j.today && j.today.day === localDay ? j.today.items || [] : [];",
+      "if (todayItems.length) {",
+      "  w.addSpacer(6);",
+      "  small('TODAY', '#fbbf24');",
+      "  for (const it of todayItems.slice(0, 3)) { const t = w.addText('\u2022 ' + it.title + (it.carried ? ' (carried over)' : '')); t.font = Font.mediumSystemFont(13); t.textColor = Color.white(); t.lineLimit = 1; }",
+      "  if (todayItems.length > 3) small('+' + (todayItems.length - 3) + ' more');",
       "}",
       "if (exam) {",
       "  w.addSpacer(null);",

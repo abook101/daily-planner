@@ -27,10 +27,13 @@ function notifyCard() {
       sField("Morning at", sInput("push__morning", c ? c.morning : NF.DEFAULTS.morning, { placeholder: "08:00" })),
       sField("Study at", sInput("push__study", c ? c.study : NF.DEFAULTS.study, { placeholder: "18:00" })),
       sField("Min before", sNum("push__lead", c ? c.lead : NF.DEFAULTS.lead))),
+    h("div", { class: "field-row" },
+      sField("Hourly until", sInput("push__hourlyEnd", c ? c.hourlyEnd : NF.DEFAULTS.hourlyEnd, { placeholder: "22:00" }))),
     h("div", { class: "panel" },
       kind("reminder", "Reminders (at their time; no time = morning plan time)"),
       kind("digest", "Morning plan (study, chores, reminders, training)"),
       kind("study", "Study nudge if nothing is logged yet today"),
+      kind("hourly", "All-day reminders: notify every hour until done"),
       kind("timer", "Study timer finished")),
     h("div", { class: "btn-row" },
       h("button", { type: "button", "data-action": "push-save" }, "Save & turn on"),
@@ -49,9 +52,9 @@ const pushEnv = () => ({
 const notifyActions = {
   "push-save": async () => {
     const kinds = {};
-    for (const k of ["reminder", "digest", "study", "timer"]) kinds[k] = checkedVal("push__k-" + k);
+    for (const k of ["reminder", "digest", "study", "timer", "hourly"]) kinds[k] = checkedVal("push__k-" + k);
     try {
-      NF.setConfig(LS, { url: val("push__url"), key: val("push__key"), morning: val("push__morning"), study: val("push__study"), lead: val("push__lead"), kinds });
+      NF.setConfig(LS, { url: val("push__url"), key: val("push__key"), morning: val("push__morning"), study: val("push__study"), hourlyEnd: val("push__hourlyEnd"), lead: val("push__lead"), kinds });
     } catch (err) { return formMsg("push", err.message, true); }
     ui.justSaved = "push";
     render();

@@ -124,7 +124,7 @@
     const oldText = JSON.stringify(old);
     const st = fakeStorage({ "planner.data": oldText });
     const d = newStore(st).load();
-    eq(d.schemaVersion, 2);
+    eq(d.schemaVersion, P.SCHEMA_VERSION);
     eq(d.reminders, []);
     eq(d.training.length, 1, "nothing else lost");
     eq(st.getItem("planner.backup.v1"), oldText, "backup made first");
@@ -158,6 +158,75 @@
     const res = newStore().checkImport(JSON.stringify({ app: "daily-planner", data: d }));
     ok(!res.ok);
     ok(res.errors.join(" ").includes("endDate is before startDate"));
+  });
+
+  // ----- done, carry over, hourly (schema 3) -----
+  const base = (extra) => Object.assign({ id: "r", name: "X", startDate: "2026-11-27", endDate: null, time: null, description: "", location: "", doneDates: [], carryOver: false, hourly: true }, extra || {});
+
+  test("new reminders start not done, no carry-over, hourly on", () => {
+    const st = newStore(); st.load();
+    const r = st.addReminder({ name: "Call", startDate: "2026-11-28" });
+    eq([r.doneDates, r.carryOver, r.hourly], [[], false, true]);
+    const r2 = st.addReminder({ name: "Pay", startDate: "2026-11-28", carryOver: true, hourly: false });
+    eq([r2.carryOver, r2.hourly], [true, false]);
+  });
+
+  test("version 2 data is upgraded: every reminder gets the new fields", () => {
+    const old = P.defaultData();
+    old.schemaVersion = 2;
+    old.reminders = [{ id: "a", name: "Old", startDate: "2026-12-01", endDate: null, time: null, description: "", location: "" }];
+    const st = fakeStorage({ "planner.data": JSON.stringify(old) });
+    const s = newStore(st); s.load();
+    const r = s.get().reminders[0];
+    eq([s.get().schemaVersion, r.doneDates, r.carryOver, r.hourly], [3, [], false, true]);
+    ok(st.keys().includes("planner.backup.v2"), "backed up before upgrading");
+  });
+
+  test("marking done and undoing is per day", () => {
+    const st = newStore(); st.load();
+    const r = st.addReminder({ name: "Call", startDate: "2026-11-27", endDate: "2026-11-29" });
+    st.setReminderDone(r.id, "2026-11-28");
+    st.setReminderDone(r.id, "2026-11-28"); // twice: still one entry
+    eq(st.get().reminders[0].doneDates, ["2026-11-28"]);
+    eq(P.reminderState(st.get().reminders[0], "2026-11-27"), "open");
+    eq(P.reminderState(st.get().reminders[0], "2026-11-28"), "done");
+    st.setReminderDone(r.id, "2026-11-28", false);
+    eq(st.get().reminders[0].doneDates, []);
+    throws(() => st.setReminderDone(r.id, "nope"), "real date");
+    throws(() => st.setReminderDone("missing", "2026-11-28"), "not found");
+  });
+
+  test("carry over: comes back every day until done on its last day or later", () => {
+    const r = base({ carryOver: true });
+    eq(["2026-11-26", "2026-11-27", "2026-11-28", "2026-12-20"].map((d) => P.reminderState(r, d)), [null, "open", "carried", "carried"]);
+    eq(P.reminderState(base({ carryOver: true, doneDates: ["2026-11-27"] }), "2026-11-28"), null, "done on the day itself");
+    eq(P.reminderState(base({ carryOver: true, doneDates: ["2026-11-30"] }), "2026-12-01"), null, "done while carried");
+    eq(P.reminderState(base({ carryOver: false }), "2026-11-28"), null, "no carry-over: gone the next day");
+  });
+
+  test("carry over of a multi-day reminder starts after its last day; done earlier in the range doesn't count", () => {
+    const r = base({ carryOver: true, endDate: "2026-11-29", doneDates: ["2026-11-28"] });
+    eq(P.reminderState(r, "2026-11-28"), "done");
+    eq(P.reminderState(r, "2026-11-29"), "open");
+    eq(P.reminderState(r, "2026-11-30"), "carried");
+  });
+
+  test("groups: carried ones are in today, done ones in their own list, not in past", () => {
+    const list = [base({ id: "a", carryOver: true }), base({ id: "b", startDate: "2026-11-28", doneDates: ["2026-11-28"] }), base({ id: "c", startDate: "2026-11-20" }), base({ id: "d", startDate: "2026-11-29" })];
+    const g = P.reminderGroups(list, "2026-11-28");
+    eq(g.today.map((r) => r.id), ["a"]);
+    eq(g.done.map((r) => r.id), ["b"]);
+    eq(g.upcoming.map((r) => r.id), ["d"]);
+    eq(g.past.map((r) => r.id), ["c"]);
+  });
+
+  test("a backup with a wrong done list or flags is refused", () => {
+    const d = P.defaultData();
+    d.reminders.push(base({ doneDates: ["not a date"] }), base({ id: "r2", carryOver: "yes", hourly: null }));
+    const res = newStore().checkImport(JSON.stringify({ app: "daily-planner", data: d }));
+    ok(!res.ok);
+    const text = res.errors.join(" ");
+    ok(text.includes("doneDates") && text.includes("carryOver") && text.includes("hourly"), text);
   });
 
   async function run(log) {

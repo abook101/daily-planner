@@ -18,7 +18,7 @@
 "use strict";
 
 (function (root) {
-  const SCHEMA_VERSION = 2; // 2 = reminders added (27 Nov 2026)
+  const SCHEMA_VERSION = 3; // 2 = reminders added, 3 = reminders can be marked done / carried over / nagged hourly (27 Nov 2026)
   const KEY = "planner.data";
   const KEY_PREV = "planner.data.prev";
   const KEY_BEFORE_IMPORT = "planner.backup.before-import";
@@ -104,7 +104,7 @@
       metrics: {},   // { "2026-11-25": { recovery, hrv, rhr, source, sleepHours?, sleepPerf? } }
       checkoffs: {}, // { "2026-11-25": ["chore:dishes", "study:maths1:1"] }
       settings: clone(DEFAULT_SETTINGS),
-      reminders: [], // [{ id, name, startDate, endDate, time, description, location }]
+      reminders: [], // [{ id, name, startDate, endDate, time, description, location, doneDates, carryOver, hourly }]
     };
   }
 
@@ -203,19 +203,38 @@
     if (r.time !== null && !isTimeStr(r.time)) e.push(where + ": bad time");
     if (typeof r.description !== "string" || r.description.length > REMINDER_DESC_MAX) e.push(where + ": description must be text up to " + REMINDER_DESC_MAX + " characters");
     if (typeof r.location !== "string" || r.location.length > REMINDER_PLACE_MAX) e.push(where + ": location must be text up to " + REMINDER_PLACE_MAX + " characters");
+    if (!Array.isArray(r.doneDates) || r.doneDates.some((x) => !isDateStr(x))) e.push(where + ": doneDates must be a list of dates");
+    if (typeof r.carryOver !== "boolean") e.push(where + ": carryOver must be true/false");
+    if (typeof r.hourly !== "boolean") e.push(where + ": hourly must be true/false");
     return e;
   }
 
-  // Splits reminders for a day into today (day is within start..end), upcoming and past.
-  // Sorted by date, then time (no time = all day = first).
+  // Where a reminder stands on a day:
+  //   "open"    scheduled for that day (start..end) and not marked done that day
+  //   "carried" its last day is over, it has "carry over" on, and nobody marked it
+  //             done on its last day or later: it comes back every day until done
+  //   "done"    scheduled for that day and marked done that day
+  //   null      not active that day (before it starts, or finished)
+  function reminderState(r, day) {
+    const last = r.endDate || r.startDate;
+    const done = r.doneDates || [];
+    if (r.startDate <= day && day <= last) return done.includes(day) ? "done" : "open";
+    if (r.carryOver && day > last && !done.some((d) => d >= last)) return "carried";
+    return null;
+  }
+
+  // Splits reminders for a day into today (open or carried over), done (done today),
+  // upcoming and past. Sorted by date, then time (no time = all day = first).
   function reminderGroups(reminders, day) {
     const lastDay = (r) => r.endDate || r.startDate;
     const byDate = (a, b) => a.startDate.localeCompare(b.startDate) || (a.time || "").localeCompare(b.time || "") || a.name.localeCompare(b.name);
     const list = (reminders || []).slice().sort(byDate);
+    const st = (r) => reminderState(r, day);
     return {
-      today: list.filter((r) => r.startDate <= day && lastDay(r) >= day),
+      today: list.filter((r) => st(r) === "open" || st(r) === "carried"),
+      done: list.filter((r) => st(r) === "done"),
       upcoming: list.filter((r) => r.startDate > day),
-      past: list.filter((r) => lastDay(r) < day).reverse(), // most recent first
+      past: list.filter((r) => lastDay(r) < day && st(r) !== "carried").reverse(), // most recent first
     };
   }
 
@@ -294,6 +313,11 @@
   // Example for the future:  MIGRATIONS[1] = (d) => { d.newThing = []; d.schemaVersion = 2; return d; };
   const MIGRATIONS = {
     1: (d) => { d.reminders = []; d.schemaVersion = 2; return d; }, // reminders added
+    2: (d) => { // reminders can be marked done, carried over, nagged hourly
+      d.reminders.forEach((r) => { r.doneDates = []; r.carryOver = false; r.hourly = true; });
+      d.schemaVersion = 3;
+      return d;
+    },
   };
 
   function migrate(d) {
@@ -617,7 +641,7 @@
     // ----- reminders -----
     // Checks what was typed and returns a clean reminder (without id).
     // Empty optional fields are fine; "" dates/times become null.
-    function checkReminder({ name, startDate, endDate = null, time = null, description = "", location = "" }) {
+    function checkReminder({ name, startDate, endDate = null, time = null, description = "", location = "", carryOver = false, hourly = true }) {
       const n = typeof name === "string" ? name.trim().replace(/\s+/g, " ") : "";
       if (!n) fail("the reminder needs a name.");
       if (n.length > REMINDER_NAME_MAX) fail("name is too long (max " + REMINDER_NAME_MAX + " characters).");
@@ -632,12 +656,12 @@
       if (desc.length > REMINDER_DESC_MAX) fail("description is too long (max " + REMINDER_DESC_MAX + " characters).");
       const loc = typeof location === "string" ? location.trim().replace(/\s+/g, " ") : "";
       if (loc.length > REMINDER_PLACE_MAX) fail("location is too long (max " + REMINDER_PLACE_MAX + " characters).");
-      return { name: n, startDate, endDate: end === startDate ? null : end, time: t, description: desc, location: loc };
+      return { name: n, startDate, endDate: end === startDate ? null : end, time: t, description: desc, location: loc, carryOver: !!carryOver, hourly: hourly !== false };
     }
 
     function addReminder(fields) {
       return update((d) => {
-        const r = Object.assign({ id: newId() }, checkReminder(fields));
+        const r = Object.assign({ id: newId(), doneDates: [] }, checkReminder(fields));
         d.reminders.push(r);
         return r;
       });
@@ -647,6 +671,17 @@
       return update((d) => {
         const r = findById(d.reminders, id, "Reminder");
         Object.assign(r, checkReminder(fields));
+        return r;
+      });
+    }
+
+    // Marks a reminder done (or not done) for one day. Only the last 60 days are kept.
+    function setReminderDone(id, day, done = true) {
+      if (!isDateStr(day)) fail("that isn't a real date.");
+      return update((d) => {
+        const r = findById(d.reminders, id, "Reminder");
+        const rest = r.doneDates.filter((x) => x !== day);
+        r.doneDates = (done ? rest.concat(day) : rest).sort().slice(-60);
         return r;
       });
     }
@@ -714,7 +749,7 @@
       markChoreDone, setChoreRange,
       addSubject, updateSubject, removeSubject, subjectUsage,
       addChore, updateChore, removeChore,
-      addReminder, updateReminder, removeReminder,
+      addReminder, updateReminder, removeReminder, setReminderDone,
       getSettings, setSettings,
       addGym, addRun, addFootball, deleteTraining,
       setMetrics, getMetrics,
@@ -758,7 +793,7 @@
   const api = {
     SCHEMA_VERSION, STUDY_BLOCK_MIN, GROUPS, DEFAULT_SETTINGS, NAME_MAX,
     REMINDER_NAME_MAX, REMINDER_DESC_MAX, REMINDER_PLACE_MAX,
-    createStore, defaultData, validateData, validateReminder, reminderGroups, validateSettings, validateMetric, settingsOf, migrate, MIGRATIONS,
+    createStore, defaultData, validateData, validateReminder, reminderGroups, reminderState, validateSettings, validateMetric, settingsOf, migrate, MIGRATIONS,
     isDateStr, toDateStr, downloadBackup, importBackupFile,
   };
 

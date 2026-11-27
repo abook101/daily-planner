@@ -283,3 +283,10 @@ next event. It runs on a free Cloudflare Worker you set up once. Full guide: `pu
 Code: `js/notify.js` (what's important), `js/notify-ui.js` (Settings card), `push/worker.mjs`
 (the sender) and the push handler in `sw.js`. The Worker address and key are saved on the phone
 only. Tests: `tests/notify.test.js` and `node push/test_worker.mjs`.
+
+### Reminders: Done, carry over, hourly (version 13)
+
+Each reminder has a **Done** button (Today card and Reminders screen); done is saved per day
+(`doneDates`, schemaVersion 3, older data and backups upgrade automatically). Optional per reminder:
+**Carry over** (comes back every day until Done) and **hourly notifications** for all-day ones (default on).
+Rules: `PlannerData.reminderState` in `js/store.js`; notifications: `js/notify.js` (see `push/README.md`).
