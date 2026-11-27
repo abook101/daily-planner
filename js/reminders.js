@@ -34,8 +34,15 @@ function remMeta(parts) {
   return h("p", { class: "muted small tight rem-meta" }, parts.filter(Boolean).join(" · "));
 }
 
+const remLast = (r) => r.endDate || r.startDate;
+// "carried over from Wed 25 Nov" for a reminder that comes back after its last day.
+const remCarriedNote = (r, day) => (PlannerData.reminderState(r, day) === "carried" ? "carried over from " + remDay(remLast(r)) : null);
+const remDoneBtn = (r, day) => PlannerData.reminderState(r, day) === "done"
+  ? h("button", { type: "button", class: "link", "data-action": "rem-undone", "data-id": r.id, "aria-label": "Undo done for " + r.name }, "Undo")
+  : h("button", { type: "button", class: "done-btn", "data-action": "rem-done", "data-id": r.id, "aria-label": "Mark " + r.name + " done" }, "Done");
+
 // ---------- Today card ----------
-// Shows reminders for today (and multi-day ones still running). Hidden when none.
+// Shows reminders for today: running multi-day ones and carried-over ones too, until marked done. Hidden when none.
 function renderRemindersCard(data, day) {
   const card = document.getElementById("card-reminders");
   const list = PlannerData.reminderGroups(data.reminders, day).today;
@@ -46,8 +53,10 @@ function renderRemindersCard(data, day) {
       h("h2", {}, "Reminders"),
       h("button", { type: "button", class: "link", "data-action": "open-reminders" }, "All ›")),
     list.map((r) => h("div", { class: "item" },
-      h("div", { class: "item-title" }, r.name),
-      remMeta([r.time, r.location, r.endDate ? "until " + remDay(r.endDate) : null]),
+      h("div", { class: "rem-row" },
+        h("div", { class: "item-title" }, r.name),
+        remDoneBtn(r, day)),
+      remMeta([remCarriedNote(r, day), r.time, r.location, r.endDate ? "until " + remDay(r.endDate) : null]),
       r.description ? h("p", { class: "small tight rem-desc" }, r.description) : null)));
 }
 
@@ -73,6 +82,8 @@ function reminderForm(p, r, buttons) {
       sField("Location", sInput(p + "__loc", r.location, { maxlength: PlannerData.REMINDER_PLACE_MAX, placeholder: "optional" }), "grow")),
     h("div", { class: "field-row" },
       sField("Description", remTextarea(p + "__desc", r.description), "grow")),
+    h("label", { class: "check-label wrap" }, sCheck(p + "__carry", !!r.carryOver), h("span", {}, "Carry over to the next day if I haven't marked it done")),
+    h("label", { class: "check-label wrap" }, sCheck(p + "__hourly", r.hourly !== false), h("span", {}, "All-day: notify me every hour until it's done")),
     buttons,
     msgLine(p));
 }
@@ -86,13 +97,14 @@ function reminderItem(r, day) {
         h("button", { type: "button", class: "secondary", "data-action": "rem-cancel" }, "Cancel"),
         h("button", { type: "button", class: "danger", "data-action": "rem-delete", "data-id": r.id }, "Delete"))));
   }
-  return h("div", { class: "item rem-item" },
+  return h("div", { class: "item rem-item" + (PlannerData.reminderState(r, day) === "done" ? " rem-done" : "") },
     h("div", { class: "rem-row" },
       h("div", { class: "item-title" }, r.name),
       h("div", { class: "rem-btns" },
+        ["open", "carried", "done"].includes(PlannerData.reminderState(r, day)) ? remDoneBtn(r, day) : null,
         h("button", { type: "button", class: "link", "data-action": "rem-edit", "data-id": r.id, "aria-label": "Edit " + r.name }, "Edit"),
         h("button", { type: "button", class: "link danger-link", "data-action": "rem-delete", "data-id": r.id, "aria-label": "Delete " + r.name }, "Delete"))),
-    remMeta([remWhen(r), remSoon(r, day), r.time, r.location]),
+    remMeta([remWhen(r), remSoon(r, day), remCarriedNote(r, day), r.time, r.location, r.carryOver ? "repeats until done" : null]),
     r.description ? h("p", { class: "small tight rem-desc" }, r.description) : null);
 }
 
@@ -120,6 +132,7 @@ function renderReminders() {
       reminderForm("new-rem", null,
         h("button", { type: "button", class: "wide", "data-action": "rem-add" }, "Add reminder"))),
     g.today.length ? section("Today", g.today, "") : null,
+    g.done.length ? section("Done today", g.done, "") : null,
     section("Upcoming", g.upcoming, "Nothing coming up."),
     g.past.length ? h("section", { class: "card" },
       details("rem-past", "Past (" + g.past.length + ")", g.past.map((r) => reminderItem(r, day)))) : null);
@@ -140,6 +153,8 @@ function reminderFields(p) {
     time: val(p + "__time") || null,
     location: val(p + "__loc"),
     description: val(p + "__desc"),
+    carryOver: checkedVal(p + "__carry"),
+    hourly: checkedVal(p + "__hourly"),
   };
 }
 
@@ -148,6 +163,16 @@ const remindersActions = {
   "rem-add": () => {
     const f = reminderFields("new-rem");
     saveSetting("new-rem", "Added reminder: " + f.name.trim(), () => store.addReminder(f));
+  },
+  "rem-done": (el) => {
+    const r = store.get().reminders.find((x) => x.id === el.dataset.id);
+    if (!r) return render();
+    saveSetting("rem-" + r.id, "Done: " + r.name, () => store.setReminderDone(r.id, today(), true));
+  },
+  "rem-undone": (el) => {
+    const r = store.get().reminders.find((x) => x.id === el.dataset.id);
+    if (!r) return render();
+    saveSetting("rem-" + r.id, "Not done: " + r.name, () => store.setReminderDone(r.id, today(), false));
   },
   "rem-edit": (el) => { ui.editReminder = el.dataset.id; render(); },
   "rem-cancel": () => { ui.editReminder = null; render(); },

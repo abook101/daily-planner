@@ -26,11 +26,17 @@ Each can be switched off in Settings > Notifications & widget.
 
 | Kind | When |
 |---|---|
-| Reminder | At its time minus "Min before" (default 10). No time set: at the morning time. |
+| Reminder | At its time minus "Min before" (default 10). No time set (all-day): at the morning time. |
+| Hourly nag | All-day reminders only: every hour after the morning time until "Hourly until" (22:00), until you tap **Done** in the app or delete the reminder. Switch off per reminder (checkbox) or for all in Settings. |
+| Carry over | Reminders with "Carry over" on that you didn't mark Done come back the next day (with their notifications and nags) until Done or deleted. |
 | Morning plan | At the morning time (08:00): study subjects, chores, reminders, training |
 | Study nudge | At 18:00, only if you haven't logged study today |
 | Study timer | When a running timer reaches its block length |
 | Exam | Not a notification: the next exam's days-left line on the widget |
+
+Tapping **Done** in the app stops that reminder's notifications within a few seconds (the app tells
+the Worker). If the phone has no internet at that moment, a nag or two can still arrive.
+The widget also lists today's open all-day reminders under the countdown ("TODAY").
 
 The app uploads the next 7 days whenever something changes (and at least every 6 hours it's
 open). Events already uploaded still ring if you don't open the app for days. The morning
@@ -85,6 +91,13 @@ The widget shows the kind, title, a **live countdown**, the time, and the next e
 left. The countdown ticks by itself; iPhone itself decides how often the widget fetches new
 data (roughly every 15 to 60 minutes), so a just-added reminder can take a while to show.
 The last answer is saved, so the widget still works offline.
+
+## Updating the Worker later
+
+When a new version needs a changed Worker (version 13 does: the widget Today list and the hourly
+nags), open the Worker in Cloudflare > **Edit code**, select all, paste the new
+`push/worker.mjs`, and click **Deploy**. The key, the storage and the trigger stay as they are.
+An old Worker keeps working with a new app, it just misses the new features.
 
 ## Limits you should know about
 

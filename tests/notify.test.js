@@ -18,7 +18,7 @@
   }
   const at = (d, hhmm) => { const [y, m, dd] = d.split("-").map(Number); const [h, mi] = hhmm.split(":").map(Number); return new Date(y, m - 1, dd, h, mi).getTime(); };
   const NOW = at("2026-11-27", "12:00");
-  const CFG = { url: "https://w.example.workers.dev", key: "abcdefghijklmnop1234", morning: "08:00", study: "18:00", lead: 10, kinds: { reminder: true, digest: true, study: true, timer: true } };
+  const CFG = { url: "https://w.example.workers.dev", key: "abcdefghijklmnop1234", morning: "08:00", study: "18:00", hourlyEnd: "22:00", lead: 10, kinds: { reminder: true, digest: true, study: true, timer: true, hourly: true } };
   const cfg = (kinds) => Object.assign({}, CFG, { kinds: Object.assign({}, CFG.kinds, kinds || {}) });
   const rem = (id, name, startDate, extra) => Object.assign({ id, name, startDate, endDate: null, time: null, description: "", location: "" }, extra || {});
   const build = (data, extra) => N.buildEvents(data, Object.assign({ nowMs: NOW, config: CFG }, extra || {}));
@@ -46,6 +46,7 @@
     throws(() => N.setConfig(st, { url: CFG.url, key: CFG.key, morning: "8am" }), "Morning time");
     throws(() => N.setConfig(st, { url: CFG.url, key: CFG.key, study: "25:00" }), "Study reminder time");
     throws(() => N.setConfig(st, { url: CFG.url, key: CFG.key, lead: "999" }), "0 to 120");
+    throws(() => N.setConfig(st, { url: CFG.url, key: CFG.key, hourlyEnd: "10pm" }), "Hourly until");
     eq(N.getConfig(st), null);
   });
 
@@ -54,7 +55,8 @@
     const c = N.setConfig(st, { url: "  daily-planner-push.me.workers.dev/ ", key: CFG.key });
     eq(c.url, "https://daily-planner-push.me.workers.dev");
     eq([c.morning, c.study, c.lead], ["08:00", "18:00", 10]);
-    eq(c.kinds, { reminder: true, digest: true, study: true, timer: true });
+    eq(c.kinds, { reminder: true, digest: true, study: true, timer: true, hourly: true });
+    eq(c.hourlyEnd, "22:00");
   });
 
   test("settings: changing the Worker or key means subscribing again; changing only times does not", () => {
@@ -149,6 +151,100 @@
     const r = build(d);
     eq(r.events.map((e) => e.at), r.events.map((e) => e.at).sort((a, b) => a - b));
     eq(JSON.stringify(build(d)), JSON.stringify(r));
+  });
+
+  // ----- hourly nags, done, carry over, widget Today list -----
+  const nagsOf = (r) => r.events.filter((e) => e.kind === "nag");
+  const hhmm = (ms) => new Date(ms).toTimeString().slice(0, 5);
+  const allDay = (extra) => Object.assign(rem("a", "Call landlord", "2026-11-27"), extra || {});
+
+  test("an all-day reminder nags every hour from the next full hour until 22:00 (today and tomorrow)", () => {
+    const d = P.defaultData(); d.reminders.push(allDay());
+    const nags = nagsOf(build(d));
+    const today = nags.filter((e) => e.id.includes("2026-11-27"));
+    eq(today.map((e) => hhmm(e.at)), ["13:00", "14:00", "15:00", "16:00", "17:00", "18:00", "19:00", "20:00", "21:00", "22:00"]);
+    ok(today.every((e) => e.notify === true && e.widget === false && e.title === "Call landlord"));
+    eq(nags.filter((e) => e.id.includes("2026-11-28")).length, 0, "a reminder for today doesn't nag tomorrow unless carried over");
+  });
+
+  test("nags: the end time is a setting, they can be switched off globally or per reminder, and timed reminders never nag", () => {
+    const d = P.defaultData(); d.reminders.push(allDay());
+    eq(nagsOf(build(d, { config: Object.assign({}, CFG, { hourlyEnd: "15:00" }) })).map((e) => hhmm(e.at)), ["13:00", "14:00", "15:00"]);
+    eq(nagsOf(build(d, { config: cfg({ hourly: false }) })).length, 0);
+    const d2 = P.defaultData(); d2.reminders.push(allDay({ hourly: false }), rem("t", "Timed", "2026-11-27", { time: "20:00" }));
+    eq(nagsOf(build(d2)).length, 0);
+  });
+
+  test("an all-day reminder for tomorrow nags tomorrow from 09:00, but not the day after", () => {
+    const d = P.defaultData(); d.reminders.push(rem("a", "A", "2026-11-28"), rem("b", "B", "2026-11-29"));
+    const nags = nagsOf(build(d));
+    eq(nags.filter((e) => e.id.startsWith("nag:a")).map((e) => hhmm(e.at))[0], "09:00");
+    eq(nags.filter((e) => e.id.startsWith("nag:b")).length, 0);
+  });
+
+  test("marking a reminder done removes it from that day's events and nags", () => {
+    const d = P.defaultData(); d.reminders.push(allDay({ doneDates: ["2026-11-27"] }), rem("t", "Timed", "2026-11-27", { time: "20:00", doneDates: ["2026-11-27"] }));
+    const r = build(d);
+    eq(r.events.filter((e) => e.kind === "reminder" || e.kind === "nag"), []);
+    eq(r.today.items, []);
+  });
+
+  test("done on one day of a multi-day reminder doesn't silence the other days", () => {
+    const d = P.defaultData();
+    d.reminders.push(rem("m", "Course", "2026-11-27", { endDate: "2026-11-29", time: "09:00", doneDates: ["2026-11-28"] }));
+    const days = build(d).events.filter((e) => e.kind === "reminder").map((e) => e.id.split(":")[2]);
+    eq(days, ["2026-11-29"], "today's 09:00 is over, the 28th is done, the 29th is left");
+  });
+
+  test("carry over: an unfinished reminder comes back the next day with nags, until it is done", () => {
+    const d = P.defaultData(); d.reminders.push(allDay({ startDate: "2026-11-25", carryOver: true }));
+    const r = build(d);
+    const today = r.events.filter((e) => e.id.startsWith("rem:a:2026-11-27"));
+    eq(today.length, 0, "its 08:00 on the 27th is over");
+    ok(nagsOf(r).some((e) => e.id.includes("2026-11-27")), "nags today");
+    const tomorrow = r.events.find((e) => e.id === "rem:a:2026-11-28");
+    ok(tomorrow && tomorrow.body.startsWith("Carried over"), "morning notification tomorrow");
+    eq(r.today.items, [{ title: "Call landlord", carried: true }]);
+    d.reminders[0].doneDates = ["2026-11-27"];
+    const done = build(d);
+    eq(done.events.filter((e) => e.kind === "reminder" || e.kind === "nag"), []);
+    eq(done.today.items, []);
+  });
+
+  test("without carry over an unfinished reminder is simply over the next day", () => {
+    const d = P.defaultData(); d.reminders.push(allDay({ startDate: "2026-11-25" }));
+    const r = build(d);
+    eq(r.events.filter((e) => e.kind === "reminder" || e.kind === "nag"), []);
+    eq(r.today.items, []);
+  });
+
+  test("the widget's Today list has open all-day reminders only (timed ones have their own countdown)", () => {
+    const d = P.defaultData();
+    d.reminders.push(allDay(), rem("t", "Timed", "2026-11-27", { time: "20:00" }), rem("f", "Future", "2026-11-29"));
+    eq(build(d).today, { day: "2026-11-27", items: [{ title: "Call landlord", carried: false }] });
+  });
+
+  test("the widget script lists today's all-day reminders", async () => {
+    const AsyncFunction = Object.getPrototypeOf(async function () {}).constructor;
+    const texts = [];
+    class ListWidget { setPadding() {} addSpacer() {} addText(t) { texts.push(t); return { font: null, textColor: null, lineLimit: 0 }; } addDate() { return { applyTimerStyle() {} }; } }
+    const pad = (n) => String(n).padStart(2, "0");
+    const n = new Date(), day = n.getFullYear() + "-" + pad(n.getMonth() + 1) + "-" + pad(n.getDate());
+    const body = { now: Date.now(), events: [], exam: null, today: { day, items: [{ title: "Call landlord", carried: false }, { title: "Pay rent", carried: true }, { title: "C", carried: false }, { title: "D", carried: false }] } };
+    const Request = class { async loadJSON() { return body; } };
+    const files = new Map();
+    const FileManager = { local: () => ({ joinPath: (a, b) => b, documentsDirectory: () => "", writeString: (p, t) => files.set(p, t), readString: (p) => files.get(p) }) };
+    const Font = new Proxy({}, { get: () => () => ({}) });
+    const Color = class { static white() { return {}; } };
+    await new AsyncFunction("config", "Script", "ListWidget", "Color", "Font", "Request", "FileManager", N.widgetScript(CFG))(
+      { runsInWidget: true }, { setWidget() {}, complete() {} }, ListWidget, Color, Font, Request, FileManager);
+    ok(texts.includes("TODAY"), texts.join("|"));
+    ok(texts.includes("\u2022 Call landlord") && texts.includes("\u2022 Pay rent (carried over)"), texts.join("|"));
+    ok(texts.includes("+1 more"), "only 3 shown");
+    body.today.day = "1999-01-01"; texts.length = 0;
+    await new AsyncFunction("config", "Script", "ListWidget", "Color", "Font", "Request", "FileManager", N.widgetScript(CFG))(
+      { runsInWidget: true }, { setWidget() {}, complete() {} }, ListWidget, Color, Font, Request, FileManager);
+    ok(!texts.includes("TODAY"), "a list from another day is not shown");
   });
 
   // ----- talking to the Worker -----

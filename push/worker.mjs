@@ -25,7 +25,7 @@ const CORS = {
 const FIRE_WINDOW_MS = 15 * 60000;   // a missed notification is still sent up to 15 min late
 const PENDING_MAX_AGE_MS = 30 * 60000;
 const SENT_KEEP_MS = 2 * 86400000;
-const MAX_EVENTS = 200;
+const MAX_EVENTS = 500;
 const NEXT_COUNT = 6;
 const DEFAULT_SUBJECT = "https://abook101.github.io/daily-planner/";
 
@@ -150,9 +150,16 @@ export function cleanEvents(list) {
     out.push({
       id: text(e.id, 80), kind: text(e.kind || "event", 20), title: text(e.title, 120), body: text(e.body, 300),
       at: e.at, notifyAt: Number.isFinite(e.notifyAt) ? e.notifyAt : e.at, notify: e.notify !== false,
+      widget: e.widget !== false,   // false = rings, but never shows as "next" on the widget (hourly nags)
     });
   }
   return out;
+}
+
+// The widget's "Today" list: { day: "YYYY-MM-DD", items: [{ title, carried }] }
+export function cleanToday(t) {
+  if (!t || typeof t.day !== "string" || !/^\d{4}-\d\d-\d\d$/.test(t.day) || !Array.isArray(t.items)) return null;
+  return { day: t.day, items: t.items.slice(0, 10).filter((i) => i && typeof i.title === "string").map((i) => ({ title: text(i.title, 120), carried: i.carried === true })) };
 }
 
 async function body(req) { try { return await req.json(); } catch (e) { return null; } }
@@ -180,15 +187,15 @@ export async function handle(req, env, nowMs = Date.now(), fetchFn = fetch) {
     const events = b && cleanEvents(b.events);
     if (!events) return reply({ error: "Expected {events: [...]}." }, 400);
     const exam = b.exam && Number.isFinite(b.exam.at) ? { name: text(b.exam.name, 80), at: b.exam.at } : null;
-    await kvPut(env, "events", { events, exam, savedAt: nowMs });
+    await kvPut(env, "events", { events, exam, today: cleanToday(b.today), savedAt: nowMs });
     return reply({ ok: true, count: events.length });
   }
 
   if (req.method === "GET" && path === "/next") {
     const stored = await kvGet(env, "events", { events: [], exam: null });
-    const upcoming = stored.events.filter((e) => e.at > nowMs).sort((a, b) => a.at - b.at).slice(0, NEXT_COUNT)
+    const upcoming = stored.events.filter((e) => e.at > nowMs && e.widget !== false).sort((a, b) => a.at - b.at).slice(0, NEXT_COUNT)
       .map(({ id, kind, title, body: b, at }) => ({ id, kind, title, body: b, at }));
-    return reply({ now: nowMs, events: upcoming, exam: stored.exam && stored.exam.at > nowMs ? stored.exam : null });
+    return reply({ now: nowMs, events: upcoming, exam: stored.exam && stored.exam.at > nowMs ? stored.exam : null, today: stored.today || null });
   }
 
   if (req.method === "GET" && path === "/pending") {

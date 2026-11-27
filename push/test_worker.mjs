@@ -1,6 +1,6 @@
 // Tests for the push sender (push/worker.mjs) with a fake KV store and a fake
 // Apple push service. No network, nothing real is touched.   Run: node push/test_worker.mjs
-import { handle, runDue, cleanEvents, b64u } from "./worker.mjs";
+import { handle, runDue, cleanEvents, cleanToday, b64u } from "./worker.mjs";
 
 const KEY = "test-key-0123456789abcdef";
 const results = [];
@@ -155,6 +155,29 @@ test("/test rings the phone right away", async () => {
   ok(r.ok);
   eq(push.calls.length, 1);
   eq((await J(await call(env, "GET", "/pending"))).items[0].body, "Test: notifications work.");
+});
+
+test("hourly nags ring but never show as the widget's next event", async () => {
+  const env = fakeEnv(), push = fakePush(201);
+  await call(env, "POST", "/subscribe", { subscription: { endpoint: "https://push.example/abc" } });
+  await call(env, "POST", "/events", { events: [ev("nag1", NOW - 1000, { kind: "nag", widget: false }), ev("later", NOW + 5000)] });
+  eq((await runDue(env, NOW, push)).queued, 1, "the nag rang");
+  eq((await J(await call(env, "GET", "/next", undefined, undefined, NOW))).events.map((e) => e.id), ["later"]);
+});
+
+test("the widget's Today list is stored, cleaned and returned by /next", async () => {
+  const env = fakeEnv();
+  const today = { day: "2026-11-27", items: [{ title: "Call landlord", carried: true }, { title: 5 }, { title: "Pay rent" }] };
+  await call(env, "POST", "/events", { events: [], today });
+  eq((await J(await call(env, "GET", "/next", undefined, undefined, NOW))).today, { day: "2026-11-27", items: [{ title: "Call landlord", carried: true }, { title: "Pay rent", carried: false }] });
+  eq(cleanToday({ day: "yesterday", items: [] }), null);
+  await call(env, "POST", "/events", { events: [] });
+  eq((await J(await call(env, "GET", "/next", undefined, undefined, NOW))).today, null);
+});
+
+test("up to 500 events are kept (hourly nags add up)", async () => {
+  const many = Array.from({ length: 600 }, (_, i) => ev("e" + i, NOW + i));
+  eq(cleanEvents(many).length, 500);
 });
 
 let passed = 0, failed = 0;

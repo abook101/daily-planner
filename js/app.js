@@ -22,7 +22,7 @@ const SY = PlannerSync;
 const NF = PlannerNotify;
 const LS = window.localStorage;
 // Shown at the bottom of Today. Must match CACHE_VERSION in sw.js (a test checks it).
-const APP_VERSION = "12";
+const APP_VERSION = "13";
 
 // Things that only matter while the screen is open (which panel is open, etc.).
 const ui = {
