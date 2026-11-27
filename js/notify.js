@@ -294,7 +294,7 @@
       "const now = Date.now();",
       "const upcoming = j ? (j.events || []).filter((e) => e.at > now) : [];",
       "const ev = upcoming[0], then = upcoming[1];",
-      "const LABELS = { reminder: 'REMINDER', digest: 'MORNING PLAN', study: 'STUDY', timer: 'STUDY TIMER' };",
+      "const LABELS = { reminder: 'REMINDER', digest: 'DASHBOARD', study: 'STUDY', timer: 'STUDY TIMER' };",
       "const hm = (ms) => new Date(ms).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });",
       "const exam = j && j.exam && j.exam.at > now ? j.exam : null;",
       "const w = new ListWidget();",
