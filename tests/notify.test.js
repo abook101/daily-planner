@@ -283,6 +283,8 @@
       { runsInWidget: true }, Script, ListWidget, Color, Font, Request, FileManager);
     ok(seen.widget, "widget set");
     ok(seen.texts.includes("Dentist"), seen.texts.join("|"));
+    ok(seen.texts.includes("REMINDER"), "friendly label: " + seen.texts.join("|"));
+    ok(!seen.texts.some((t) => /digest/i.test(t)), "no raw 'DIGEST'");
     eq([seen.dates, seen.timer], [1, 1]);
     ok(files.size === 1, "last answer cached for offline");
   });
