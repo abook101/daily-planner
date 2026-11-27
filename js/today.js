@@ -6,6 +6,8 @@
 //   - undo for the last log,
 //   - the low-energy switch (only lasts for the day it was switched on),
 //   - this week's training tally (including today),
+//   - the study sessions logged today and this week (all of them, not only
+//     the suggested blocks),
 //   - reading number inputs ("4,5" and "4.5" both work).
 //
 // `storage` is localStorage in the app, or a fake in tests. None of these
@@ -141,6 +143,41 @@
     };
   }
 
+  // ---------- study logged (today + this week) ----------
+  // Every study session counts here, however it was logged: timer, "Did it",
+  // or "Log other study". Today's list is in the order you logged it; the week
+  // is minutes per subject (Mon–today), most minutes first.
+  function studyLogged(data, today) {
+    const nameOf = {};
+    for (const s of data.subjects) nameOf[s.id] = s.name;
+    const name = (id) => nameOf[id] || id;
+    const todayList = data.studySessions
+      .filter((s) => s.date === today)
+      .map((s) => ({ id: s.id, subjectId: s.subjectId, subjectName: name(s.subjectId), minutes: s.minutes }));
+    const start = L.weekStart(today);
+    const per = {};
+    for (const s of data.studySessions) {
+      if (s.date < start || s.date > today) continue;
+      per[s.subjectId] = (per[s.subjectId] || 0) + s.minutes;
+    }
+    const week = Object.entries(per)
+      .map(([subjectId, minutes]) => ({ subjectId, subjectName: name(subjectId), minutes }))
+      .sort((a, b) => b.minutes - a.minutes || a.subjectName.localeCompare(b.subjectName));
+    return {
+      today: todayList,
+      todayMinutes: todayList.reduce((a, s) => a + s.minutes, 0),
+      week,
+      weekMinutes: week.reduce((a, s) => a + s.minutes, 0),
+    };
+  }
+
+  // 95 -> "1 h 35 min", 45 -> "45 min", 120 -> "2 h"
+  function formatMinutes(min) {
+    const hrs = Math.floor(min / 60), m = min % 60;
+    if (!hrs) return m + " min";
+    return hrs + " h" + (m ? " " + m + " min" : "");
+  }
+
   // ---------- short subject names for the exam strip ----------
   const SHORT = {
     maths1: "Maths 1", mechdesign: "Mech. Design", electrical: "Electrical",
@@ -162,7 +199,7 @@
     startTimer, getTimer, cancelTimer, elapsedMs, formatClock, minutesToLog,
     withUndo, getUndo, undoLast, clearUndo,
     isLowEnergy, setLowEnergy,
-    weekTally, shortName, friendlyError,
+    weekTally, studyLogged, formatMinutes, shortName, friendlyError,
     KEYS: { TIMER_KEY, UNDO_KEY, LOW_ENERGY_KEY },
   };
 

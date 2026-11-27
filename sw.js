@@ -1,6 +1,6 @@
 // Service worker: saves the app's files on the phone so it opens without internet.
 // IMPORTANT: when you change any file, bump CACHE_VERSION so phones get the new copy.
-const CACHE_VERSION = "planner-v8";
+const CACHE_VERSION = "planner-v9";
 
 const FILES = [
   "./",

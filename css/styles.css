@@ -135,6 +135,12 @@ details.more summary { color: var(--blue); font-size: 0.85rem; cursor: pointer; 
 .bar { height: 8px; border-radius: 4px; background: #111827; overflow: hidden; margin-top: 6px; }
 .bar-fill { height: 100%; width: 0; background: var(--blue); transition: width 1s linear; }
 .bar-fill.full { background: var(--accent); }
+.study-log { margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--line); }
+.sub-head { margin: 0; font-size: 0.85rem; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; }
+.study-logged { margin-top: 4px; }
+.study-logged li { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+.week-study { list-style: none; padding: 0; margin: 4px 0 0; font-size: 0.9rem; }
+.week-study li { display: flex; justify-content: space-between; padding: 3px 0; }
 
 /* ---------- chores ---------- */
 .chore { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 8px 0; border-top: 1px solid var(--line); }

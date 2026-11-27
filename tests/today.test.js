@@ -176,6 +176,40 @@
     eq(T.friendlyError(new Error("Not saved: metrics[2026-11-25]: recovery must be 0–100")), "Not saved: recovery must be 0–100");
   });
 
+  test("study logged: lists every session today (incl. self-logged), week per subject", () => {
+    const st = newStore(fakeStorage());
+    st.addStudySession({ subjectId: "statics", minutes: 45 });                       // "Log other study"
+    st.addStudySession({ subjectId: "maths1", minutes: 50 });                        // a suggested block
+    st.addStudySession({ subjectId: "statics", minutes: 30, date: "2026-11-23" });   // Monday, same week
+    st.addStudySession({ subjectId: "maths1", minutes: 60, date: "2026-11-22" });    // Sunday before: not this week
+    const r = T.studyLogged(st.get(), TODAY);
+    eq(r.today.map((s) => [s.subjectId, s.minutes]), [["statics", 45], ["maths1", 50]]);
+    ok(r.today.every((s) => s.id && s.subjectName && s.subjectName !== s.subjectId), "has ids and names");
+    eq(r.todayMinutes, 95);
+    eq(r.week.map((w) => [w.subjectId, w.minutes]), [["statics", 75], ["maths1", 50]]);
+    eq(r.weekMinutes, 125);
+  });
+
+  test("study logged: empty when nothing logged", () => {
+    const r = T.studyLogged(newStore(fakeStorage()).get(), TODAY);
+    eq([r.today, r.week, r.todayMinutes, r.weekMinutes], [[], [], 0, 0]);
+  });
+
+  test("removing a study session can be undone", () => {
+    const ls = fakeStorage(), st = newStore(fakeStorage());
+    const s = st.addStudySession({ subjectId: "statics", minutes: 45 });
+    T.withUndo(st, ls, "Removed", () => st.deleteStudySession(s.id), NOW);
+    eq(T.studyLogged(st.get(), TODAY).today.length, 0);
+    T.undoLast(st, ls, NOW + MIN);
+    eq(T.studyLogged(st.get(), TODAY).today.map((x) => x.id), [s.id]);
+  });
+
+  test("formatMinutes", () => {
+    eq(T.formatMinutes(45), "45 min");
+    eq(T.formatMinutes(120), "2 h");
+    eq(T.formatMinutes(95), "1 h 35 min");
+  });
+
   // ---- run ----
   async function run_(log) {
     let passed = 0, failed = 0;

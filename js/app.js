@@ -21,7 +21,7 @@ const T = PlannerToday;
 const SY = PlannerSync;
 const LS = window.localStorage;
 // Shown at the bottom of Today. Must match CACHE_VERSION in sw.js (a test checks it).
-const APP_VERSION = "8";
+const APP_VERSION = "9";
 
 // Things that only matter while the screen is open (which panel is open, etc.).
 const ui = {
@@ -266,7 +266,8 @@ function renderTraining(plan, data, day) {
 function renderStudy(plan, data, day) {
   const timer = T.getTimer(LS);
   const checked = data.checkoffs[day] || [];
-  const minutesToday = data.studySessions.filter((s) => s.date === day).reduce((a, s) => a + s.minutes, 0);
+  const logged = T.studyLogged(data, day);
+  const minutesToday = logged.todayMinutes;
 
   const runningRow = (t) => h("div", { class: "timer" },
     h("div", { class: "timer-clock" }, h("span", { "data-timer": "clock" }, "0:00"), h("span", { class: "muted" }, " / " + t.minutes + ":00")),
@@ -294,11 +295,27 @@ function renderStudy(plan, data, day) {
   const orphan = timer && !plan.study.blocks.some((b) => b.key === timer.blockKey)
     ? h("div", { class: "item" }, h("div", { class: "item-title" }, timer.subjectName + " (running)"), runningRow(timer)) : null;
 
+  // Everything logged today (timer, "Did it" and "Log other study"), each removable.
+  const loggedList = logged.today.length ? h("div", { class: "study-log" },
+    h("h3", { class: "sub-head" }, "Logged today"),
+    h("ul", { class: "logged study-logged" }, logged.today.map((s) => h("li", {},
+      h("span", {}, "✓ " + s.subjectName + ", " + s.minutes + " min"),
+      h("button", { type: "button", class: "link", "data-action": "study-remove", "data-id": s.id,
+        "aria-label": "Remove " + s.subjectName + ", " + s.minutes + " min" }, "Remove"))))) : null;
+  const weekList = logged.week.length
+    ? details("study-week", "This week: " + T.formatMinutes(logged.weekMinutes),
+      h("ul", { class: "week-study" }, logged.week.map((w) => h("li", {},
+        h("span", {}, w.subjectName), h("span", { class: "muted" }, T.formatMinutes(w.minutes))))),
+      h("p", { class: "muted small tight" }, "Mon–today, everything you logged."))
+    : null;
+
   const subjects = data.subjects.map((s) => h("option", { value: s.id }, s.name));
   fill("card-study",
     h("div", { class: "card-head" }, h("h2", {}, "Study"), h("span", { class: "badge" }, "Today " + minutesToday + " min")),
     orphan,
     blocks.length ? blocks : h("p", { class: "muted" }, plan.study.reason),
+    loggedList,
+    weekList,
     details("study-other", "Log other study",
       h("div", { class: "field-row" },
         h("label", { class: "field grow" }, h("span", {}, "Subject"), h("select", { id: "other-subject" }, subjects)),
@@ -471,6 +488,18 @@ const actions = {
     if (!min || Number.isNaN(min)) return showToast("Type the minutes studied.", false);
     const name = (store.get().subjects.find((s) => s.id === subjectId) || {}).name || subjectId;
     act(name + ", " + min + " min", () => store.addStudySession({ subjectId, minutes: min }));
+  },
+
+  "study-remove": (el) => {
+    const s = store.get().studySessions.find((x) => x.id === el.dataset.id);
+    if (!s) return render();
+    const name = (store.get().subjects.find((x) => x.id === s.subjectId) || {}).name || s.subjectId;
+    const label = "Removed " + name + ", " + s.minutes + " min";
+    try {
+      T.withUndo(store, LS, label, () => store.deleteStudySession(s.id), Date.now());
+      showToast(label, true);
+    } catch (err) { showToast(T.friendlyError(err), false); }
+    render();
   },
 
   "chore-done": (el) => {
