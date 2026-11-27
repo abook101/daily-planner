@@ -19,9 +19,10 @@ const store = PlannerData.createStore(window.localStorage);
 const L = PlannerLogic;
 const T = PlannerToday;
 const SY = PlannerSync;
+const NF = PlannerNotify;
 const LS = window.localStorage;
 // Shown at the bottom of Today. Must match CACHE_VERSION in sw.js (a test checks it).
-const APP_VERSION = "10";
+const APP_VERSION = "11";
 
 // Things that only matter while the screen is open (which panel is open, etc.).
 const ui = {
@@ -349,6 +350,7 @@ function renderChores(plan) {
 
 let lastDay = null;
 function render() {
+  pushSoon();
   const day = today();
   lastDay = day;
   // Three screens on one page: Today, Settings (#settings) or Reminders (#reminders).
@@ -539,11 +541,29 @@ function autoSync() {
   if (!document.hidden && SY.shouldAutoSync(LS, Date.now())) runSync(false);
 }
 
+// Phone notifications (js/notify.js). After anything changes, send the upcoming events
+// to the Worker a moment later. Does nothing when notifications aren't turned on.
+let pushTimer = null;
+function pushSoon() {
+  clearTimeout(pushTimer);
+  pushTimer = setTimeout(pushNow, 2500);
+}
+async function pushNow() {
+  if (!NF.getConfig(LS)) return;
+  const before = NF.statusLine(LS, Date.now());
+  const r = await NF.syncEvents({
+    data: store.get(), storage: LS, fetchFn: (u, o) => window.fetch(u, o), nowMs: Date.now(),
+    timer: T.getTimer(LS), lowEnergy: (d) => T.isLowEnergy(LS, d),
+  });
+  // Only redraw Settings when the status line changed (so typing isn't disturbed).
+  if (!r.skipped && isSettingsView() && NF.statusLine(LS, Date.now()) !== before && !document.activeElement.closest("#settings-main")) render();
+}
+
 function setupEvents() {
   document.body.addEventListener("click", (e) => {
     const el = e.target.closest("[data-action]");
     if (!el || el.disabled) return;
-    const fn = actions[el.dataset.action] || settingsActions[el.dataset.action] || remindersActions[el.dataset.action];
+    const fn = actions[el.dataset.action] || settingsActions[el.dataset.action] || remindersActions[el.dataset.action] || notifyActions[el.dataset.action];
     if (fn) fn(el);
   });
   document.getElementById("toast-undo").addEventListener("click", () => {
