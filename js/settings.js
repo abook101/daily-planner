@@ -145,7 +145,8 @@ function renderSettings() {
       h("button", { type: "button", class: "wide", "data-action": "set-study-save" }, "Save study block"),
       msgLine("study")),
 
-    syncCard());
+    syncCard(),
+    notifyCard());
 
   for (const [id, v] of Object.entries(keep)) {
     const el = document.getElementById(id);

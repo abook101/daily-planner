@@ -1,6 +1,6 @@
 // Service worker: saves the app's files on the phone so it opens without internet.
 // IMPORTANT: when you change any file, bump CACHE_VERSION so phones get the new copy.
-const CACHE_VERSION = "planner-v10";
+const CACHE_VERSION = "planner-v11";
 
 const FILES = [
   "./",
@@ -12,6 +12,8 @@ const FILES = [
   "js/sync.js",
   "js/settings.js",
   "js/reminders.js",
+  "js/notify.js",
+  "js/notify-ui.js",
   "js/app.js",
   "manifest.webmanifest",
   "icons/icon.svg",
@@ -65,3 +67,38 @@ async function networkFirst(req) {
   const hit = await cache.match(req, { ignoreSearch: true });
   return hit || fromNetwork;
 }
+
+// ---------- Notifications ----------
+// The push "ring" from the Worker carries no text. We ask the Worker what to show
+// (address + key were saved in this cache by the app), then show it. iPhone insists
+// that every ring shows something, so if the Worker can't be reached we show a plain note.
+self.addEventListener("push", (event) => {
+  event.waitUntil(showPending());
+});
+
+async function showPending() {
+  let items = [];
+  try {
+    const cache = await caches.open("planner-push-config");
+    const saved = await cache.match("push-config");
+    const cfg = saved ? await saved.json() : null;
+    if (cfg) {
+      const res = await fetch(cfg.url + "/pending", { headers: { Authorization: "Bearer " + cfg.key }, cache: "no-store" });
+      if (res.ok) items = (await res.json()).items || [];
+    }
+  } catch (e) { /* fall through to the plain note */ }
+  if (!items.length) items = [{ title: "Daily Planner", body: "Something is due. Open the planner.", tag: "planner-generic" }];
+  await Promise.all(items.map((i) => self.registration.showNotification(i.title, {
+    body: i.body, tag: i.tag || undefined, icon: "icons/icon-192.png", data: { url: "./" },
+  })));
+}
+
+self.addEventListener("notificationclick", (event) => {
+  event.notification.close();
+  event.waitUntil(
+    self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((wins) => {
+      for (const w of wins) { if ("focus" in w) return w.focus(); }
+      return self.clients.openWindow("./");
+    })
+  );
+});

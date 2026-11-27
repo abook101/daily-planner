@@ -1,0 +1,14 @@
+# Optional: only if you deploy with the command line (npx wrangler deploy).
+# The dashboard way in push/README.md needs no file at all.
+name = "daily-planner-push"
+main = "worker.mjs"
+compatibility_date = "2026-01-01"
+
+[triggers]
+crons = ["* * * * *"]
+
+[[kv_namespaces]]
+binding = "PLANNER"
+id = "PASTE-YOUR-KV-NAMESPACE-ID-HERE"
+
+# Set the secret with:  npx wrangler secret put API_KEY   (16+ random characters)

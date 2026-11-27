@@ -21,12 +21,14 @@
   <script src="../js/plan.js"></script>
   <script src="../js/today.js"></script>
   <script src="../js/sync.js"></script>
+  <script src="../js/notify.js"></script>
   <script src="data.test.js"></script>
   <script src="plan.test.js"></script>
   <script src="today.test.js"></script>
   <script src="settings.test.js"></script>
   <script src="sync.test.js"></script>
   <script src="reminders.test.js"></script>
+  <script src="notify.test.js"></script>
   <script>
     const ul = document.getElementById("results");
     function show(good, name, err) {
@@ -50,7 +52,9 @@
       const f = await window.runSyncTests(show);
       heading("Reminders (store.js)");
       const g = await window.runReminderTests(show);
-      const all = [a, b, c, e, f, g];
+      heading("Phone notifications (notify.js)");
+      const n = await window.runNotifyTests(show);
+      const all = [a, b, c, e, f, g, n];
       const passed = all.reduce((n, r) => n + r.passed, 0), failed = all.reduce((n, r) => n + r.failed, 0);
       const el = document.getElementById("summary");
       el.textContent = passed + " passed, " + failed + " failed";

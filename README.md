@@ -274,3 +274,12 @@ type the numbers on the phone as before.
 5. Settings ✅
 6. Whoop laptop sync ✅
 7. Tests, README, website and phone install ✅
+
+## Phone notifications and widget (step 8, version 11)
+
+Important events (reminders, the morning plan, a study nudge, the study timer) can show in the
+iPhone's notifications even when the app is closed, and a Scriptable widget counts down to the
+next event. It runs on a free Cloudflare Worker you set up once. Full guide: `push/README.md`.
+Code: `js/notify.js` (what's important), `js/notify-ui.js` (Settings card), `push/worker.mjs`
+(the sender) and the push handler in `sw.js`. The Worker address and key are saved on the phone
+only. Tests: `tests/notify.test.js` and `node push/test_worker.mjs`.
