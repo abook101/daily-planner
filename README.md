@@ -13,6 +13,7 @@ All data stays on the phone (browser local storage).
 - Logging gym sessions (Push / Pull / Legs), runs and football
 - A daily suggestion: run, gym or rest, based on Whoop recovery, HRV and resting HR
 - A laptop Python script that sends Whoop data to the phone over home Wi-Fi
+- Reminders for anything else (name + start date; optional end date, time, location, description)
 
 ## Folder layout
 
@@ -25,6 +26,7 @@ All data stays on the phone (browser local storage).
 | `js/plan.js` | Daily plan logic: what to study, which chores, run/gym/rest |
 | `js/today.js` | Today screen rules: study timer, undo, low energy switch, week tally |
 | `js/settings.js` | The Settings screen (gear on Today) |
+| `js/reminders.js` | The Reminders screen (bell on Today) and the Reminders card on Today |
 | `js/sync.js` | Whoop numbers from the laptop: fetching and the merge rules |
 | `sw.js` | Service worker: stores the files on the phone so it works offline (internet first, stored copy when offline) |
 | `manifest.webmanifest` | Name, icon and colours for "Add to Home Screen" |
@@ -157,6 +159,24 @@ when you save one box.
 The targets and block length are saved in the data as `settings` (so they're in backups).
 Data from before step 5 has no `settings` and simply uses the defaults: no migration needed.
 
+## Reminders
+
+Tap the bell (top right on Today). The address becomes `#reminders`; *‹ Today* goes back.
+
+- **New reminder**: *Name* and *Start date* are required. *End date*, *Time*, *Location*
+  and *Description* are optional. The end date can't be before the start date.
+- The list is split into **Today** (today is between start and end date), **Upcoming**
+  (sorted by date, then time; "tomorrow" / "in 3 days") and **Past** (folded away).
+- *Edit* opens the reminder's form in place; *Delete* removes it (with *Undo*).
+- On Today, a **Reminders** card shows everything for today (multi-day ones every day
+  until they end). It's hidden when there's nothing.
+- Reminders are only shown in the app. They don't send phone notifications (that would
+  need a server).
+
+Reminders are saved in the data as `reminders` (schemaVersion 2), so they're in every
+backup. Data and backups from version 1 are upgraded automatically with an empty list
+(a copy of the old data is kept as `planner.backup.v1`).
+
 ## Whoop sync from the laptop (step 6)
 
 A Python program on the laptop (`sync/whoop_sync.py`, standard library only)
@@ -179,8 +199,8 @@ All of these need nothing installed except Python (and Node, optional):
 
 | What | How | Count |
 |---|---|---|
-| App (in the browser) | `python -m http.server 8000`, open http://localhost:8000/tests/ | 108 |
-| App (Node) | `node tests/data.test.js` (and `plan`, `today`, `settings`, `sync`) | 108 |
+| App (in the browser) | `python -m http.server 8000`, open http://localhost:8000/tests/ | 126 |
+| App (Node) | `node tests/data.test.js` (and `plan`, `today`, `settings`, `sync`, `reminders`) | 126 |
 | Laptop sync | `python sync/test_whoop_sync.py` | 21 |
 | Website has no private files | `python tools/test_build_site.py` | 4 |
 

@@ -26,6 +26,7 @@
   <script src="today.test.js"></script>
   <script src="settings.test.js"></script>
   <script src="sync.test.js"></script>
+  <script src="reminders.test.js"></script>
   <script>
     const ul = document.getElementById("results");
     function show(good, name, err) {
@@ -47,7 +48,10 @@
       const e = await window.runSettingsTests(show);
       heading("Whoop laptop sync (sync.js)");
       const f = await window.runSyncTests(show);
-      const passed = a.passed + b.passed + c.passed + e.passed + f.passed, failed = a.failed + b.failed + c.failed + e.failed + f.failed;
+      heading("Reminders (store.js)");
+      const g = await window.runReminderTests(show);
+      const all = [a, b, c, e, f, g];
+      const passed = all.reduce((n, r) => n + r.passed, 0), failed = all.reduce((n, r) => n + r.failed, 0);
       const el = document.getElementById("summary");
       el.textContent = passed + " passed, " + failed + " failed";
       el.className = failed ? "fail" : "pass";

@@ -21,7 +21,7 @@ const T = PlannerToday;
 const SY = PlannerSync;
 const LS = window.localStorage;
 // Shown at the bottom of Today. Must match CACHE_VERSION in sw.js (a test checks it).
-const APP_VERSION = "9";
+const APP_VERSION = "10";
 
 // Things that only matter while the screen is open (which panel is open, etc.).
 const ui = {
@@ -32,6 +32,7 @@ const ui = {
   open: {},              // which <details> sections are expanded
   justSaved: null,       // Settings: the form just saved (its fields are redrawn from the data)
   syncing: false,        // a laptop sync is running right now
+  editReminder: null,    // Reminders: id of the reminder being edited
 };
 
 const today = () => PlannerData.toDateStr(new Date());
@@ -350,14 +351,19 @@ let lastDay = null;
 function render() {
   const day = today();
   lastDay = day;
-  // Two screens on one page: Today, or Settings when the address ends in #settings.
+  // Three screens on one page: Today, Settings (#settings) or Reminders (#reminders).
   const inSettings = isSettingsView();
+  const inReminders = !inSettings && isRemindersView();
   document.body.classList.toggle("in-settings", inSettings);
+  document.body.classList.toggle("in-reminders", inReminders);
   document.getElementById("settings-view").hidden = !inSettings;
+  document.getElementById("reminders-view").hidden = !inReminders;
   if (inSettings) { renderSettings(); return; }
+  if (inReminders) { renderReminders(); return; }
   const data = store.get();
   const plan = L.planDay(data, day, { lowEnergy: T.isLowEnergy(LS, day) });
   renderHeader(plan);
+  renderRemindersCard(data, day);
   renderMetrics(data, day);
   renderTraining(plan, data, day);
   renderStudy(plan, data, day);
@@ -537,7 +543,7 @@ function setupEvents() {
   document.body.addEventListener("click", (e) => {
     const el = e.target.closest("[data-action]");
     if (!el || el.disabled) return;
-    const fn = actions[el.dataset.action] || settingsActions[el.dataset.action];
+    const fn = actions[el.dataset.action] || settingsActions[el.dataset.action] || remindersActions[el.dataset.action];
     if (fn) fn(el);
   });
   document.getElementById("toast-undo").addEventListener("click", () => {

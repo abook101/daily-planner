@@ -185,10 +185,10 @@
     try {
       const st = fakeStorage({ "planner.data": oldText });
       const d = newStore(st).load();
-      eq(d.schemaVersion, 1);
+      eq(d.schemaVersion, P.SCHEMA_VERSION, "migrated all the way up");
       eq(d.checkoffs, {});
       eq(st.getItem("planner.backup.v0"), oldText, "backup made before migrating");
-      eq(JSON.parse(st.getItem("planner.data")).schemaVersion, 1, "migrated data saved");
+      eq(JSON.parse(st.getItem("planner.data")).schemaVersion, P.SCHEMA_VERSION, "migrated data saved");
     } finally {
       delete P.MIGRATIONS[0];
     }

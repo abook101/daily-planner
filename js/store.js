@@ -18,7 +18,7 @@
 "use strict";
 
 (function (root) {
-  const SCHEMA_VERSION = 1;
+  const SCHEMA_VERSION = 2; // 2 = reminders added (27 Nov 2026)
   const KEY = "planner.data";
   const KEY_PREV = "planner.data.prev";
   const KEY_BEFORE_IMPORT = "planner.backup.before-import";
@@ -76,6 +76,11 @@
   };
   const NAME_MAX = 60;
 
+  // Reminders (Reminders screen): limits for what you can type.
+  const REMINDER_NAME_MAX = 100;
+  const REMINDER_DESC_MAX = 1000;
+  const REMINDER_PLACE_MAX = 100;
+
   const DEFAULT_CHORES = [
     ["hoovering", "Hoovering", 5, 7],
     ["mopping", "Mopping", 10, 14],
@@ -99,6 +104,7 @@
       metrics: {},   // { "2026-11-25": { recovery, hrv, rhr, source, sleepHours?, sleepPerf? } }
       checkoffs: {}, // { "2026-11-25": ["chore:dishes", "study:maths1:1"] }
       settings: clone(DEFAULT_SETTINGS),
+      reminders: [], // [{ id, name, startDate, endDate, time, description, location }]
     };
   }
 
@@ -181,6 +187,38 @@
     return e;
   }
 
+  const isTimeStr = (t) => typeof t === "string" && /^([01]\d|2[0-3]):[0-5]\d$/.test(t);
+
+  // A reminder: name + start date are required. endDate/time are null when
+  // not set; description/location are "" when not set.
+  function validateReminder(r, where) {
+    const e = [];
+    if (!r || typeof r !== "object") return [where + ": not an object"];
+    if (!isText(r.id)) e.push(where + ": missing id");
+    if (!isText(r.name)) e.push(where + ": missing name");
+    else if (r.name.length > REMINDER_NAME_MAX) e.push(where + ": name is longer than " + REMINDER_NAME_MAX + " characters");
+    if (!isDateStr(r.startDate)) e.push(where + ": bad startDate");
+    if (r.endDate !== null && !isDateStr(r.endDate)) e.push(where + ": bad endDate");
+    else if (r.endDate !== null && isDateStr(r.startDate) && r.endDate < r.startDate) e.push(where + ": endDate is before startDate");
+    if (r.time !== null && !isTimeStr(r.time)) e.push(where + ": bad time");
+    if (typeof r.description !== "string" || r.description.length > REMINDER_DESC_MAX) e.push(where + ": description must be text up to " + REMINDER_DESC_MAX + " characters");
+    if (typeof r.location !== "string" || r.location.length > REMINDER_PLACE_MAX) e.push(where + ": location must be text up to " + REMINDER_PLACE_MAX + " characters");
+    return e;
+  }
+
+  // Splits reminders for a day into today (day is within start..end), upcoming and past.
+  // Sorted by date, then time (no time = all day = first).
+  function reminderGroups(reminders, day) {
+    const lastDay = (r) => r.endDate || r.startDate;
+    const byDate = (a, b) => a.startDate.localeCompare(b.startDate) || (a.time || "").localeCompare(b.time || "") || a.name.localeCompare(b.name);
+    const list = (reminders || []).slice().sort(byDate);
+    return {
+      today: list.filter((r) => r.startDate <= day && lastDay(r) >= day),
+      upcoming: list.filter((r) => r.startDate > day),
+      past: list.filter((r) => lastDay(r) < day).reverse(), // most recent first
+    };
+  }
+
   // Settings errors are written for people, because they show up on the
   // Settings screen as they are.
   function validateSettings(s) {
@@ -215,7 +253,7 @@
     if (!d || typeof d !== "object" || Array.isArray(d)) return ["data is not an object"];
     const e = [];
     if (d.schemaVersion !== SCHEMA_VERSION) e.push("schemaVersion should be " + SCHEMA_VERSION + ", got " + d.schemaVersion);
-    for (const k of ["subjects", "studySessions", "chores", "training"]) {
+    for (const k of ["subjects", "studySessions", "chores", "training", "reminders"]) {
       if (!Array.isArray(d[k])) e.push(k + " must be a list");
     }
     for (const k of ["metrics", "checkoffs"]) {
@@ -237,6 +275,8 @@
     uniqueIds(d.chores, "chores");
     d.training.forEach((t, i) => e.push(...validateTraining(t, "training[" + i + "]")));
     uniqueIds(d.training, "training");
+    d.reminders.forEach((r, i) => e.push(...validateReminder(r, "reminders[" + i + "]")));
+    uniqueIds(d.reminders, "reminders");
     for (const [date, m] of Object.entries(d.metrics)) {
       if (!isDateStr(date)) e.push("metrics: bad date key '" + date + "'");
       e.push(...validateMetric(m, "metrics[" + date + "]"));
@@ -252,7 +292,9 @@
   // ---------- migrations ----------
   // MIGRATIONS[n] upgrades data from version n to n+1.
   // Example for the future:  MIGRATIONS[1] = (d) => { d.newThing = []; d.schemaVersion = 2; return d; };
-  const MIGRATIONS = {};
+  const MIGRATIONS = {
+    1: (d) => { d.reminders = []; d.schemaVersion = 2; return d; }, // reminders added
+  };
 
   function migrate(d) {
     let data = d;
@@ -572,6 +614,50 @@
       });
     }
 
+    // ----- reminders -----
+    // Checks what was typed and returns a clean reminder (without id).
+    // Empty optional fields are fine; "" dates/times become null.
+    function checkReminder({ name, startDate, endDate = null, time = null, description = "", location = "" }) {
+      const n = typeof name === "string" ? name.trim().replace(/\s+/g, " ") : "";
+      if (!n) fail("the reminder needs a name.");
+      if (n.length > REMINDER_NAME_MAX) fail("name is too long (max " + REMINDER_NAME_MAX + " characters).");
+      if (!startDate) fail("the reminder needs a start date.");
+      if (!isDateStr(startDate)) fail("start date isn't a real date.");
+      const end = endDate === "" || endDate === undefined ? null : endDate;
+      if (end !== null && !isDateStr(end)) fail("end date isn't a real date.");
+      if (end !== null && end < startDate) fail("end date can't be before the start date.");
+      const t = time === "" || time === undefined ? null : time;
+      if (t !== null && !isTimeStr(t)) fail("time isn't a real time (use e.g. 14:30).");
+      const desc = typeof description === "string" ? description.trim() : "";
+      if (desc.length > REMINDER_DESC_MAX) fail("description is too long (max " + REMINDER_DESC_MAX + " characters).");
+      const loc = typeof location === "string" ? location.trim().replace(/\s+/g, " ") : "";
+      if (loc.length > REMINDER_PLACE_MAX) fail("location is too long (max " + REMINDER_PLACE_MAX + " characters).");
+      return { name: n, startDate, endDate: end === startDate ? null : end, time: t, description: desc, location: loc };
+    }
+
+    function addReminder(fields) {
+      return update((d) => {
+        const r = Object.assign({ id: newId() }, checkReminder(fields));
+        d.reminders.push(r);
+        return r;
+      });
+    }
+
+    function updateReminder(id, fields) {
+      return update((d) => {
+        const r = findById(d.reminders, id, "Reminder");
+        Object.assign(r, checkReminder(fields));
+        return r;
+      });
+    }
+
+    function removeReminder(id) {
+      return update((d) => {
+        findById(d.reminders, id, "Reminder");
+        d.reminders = d.reminders.filter((r) => r.id !== id);
+      });
+    }
+
     // ----- backups: export / import -----
     function exportJSON() {
       load(); // always start from what is saved (another tab may have changed it)
@@ -596,6 +682,7 @@
         studySessions: doc.studySessions.length,
         training: doc.training.length,
         metricDays: Object.keys(doc.metrics).length,
+        reminders: doc.reminders.length,
       };
       return { ok: true, errors: [], data: doc, summary };
     }
@@ -627,6 +714,7 @@
       markChoreDone, setChoreRange,
       addSubject, updateSubject, removeSubject, subjectUsage,
       addChore, updateChore, removeChore,
+      addReminder, updateReminder, removeReminder,
       getSettings, setSettings,
       addGym, addRun, addFootball, deleteTraining,
       setMetrics, getMetrics,
@@ -659,7 +747,7 @@
       const msg = "Replace ALL current data with this backup?\n\n" +
         "Backup from: " + s.exportedAt + "\n" +
         s.studySessions + " study sessions, " + s.training + " training entries, " +
-        s.metricDays + " days of Whoop data.\n\n" +
+        s.metricDays + " days of Whoop data, " + s.reminders + " reminders.\n\n" +
         "(Your current data is kept as a safety copy.)";
       if (!ask(msg)) return "Import cancelled. Nothing changed.";
       store.applyImport(res);
@@ -669,7 +757,8 @@
 
   const api = {
     SCHEMA_VERSION, STUDY_BLOCK_MIN, GROUPS, DEFAULT_SETTINGS, NAME_MAX,
-    createStore, defaultData, validateData, validateSettings, validateMetric, settingsOf, migrate, MIGRATIONS,
+    REMINDER_NAME_MAX, REMINDER_DESC_MAX, REMINDER_PLACE_MAX,
+    createStore, defaultData, validateData, validateReminder, reminderGroups, validateSettings, validateMetric, settingsOf, migrate, MIGRATIONS,
     isDateStr, toDateStr, downloadBackup, importBackupFile,
   };
 
